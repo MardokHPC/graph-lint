@@ -10,10 +10,11 @@ rem NVCC_PREPEND_FLAGS=--allow-unsupported-compiler: CUDA 12.6 does not know
 rem MSVC 14.44 and refuses to compile the host code without it. Safe here because
 rem the host code is also compiled by /W4 /WX through -Xcompiler (CMakeLists.txt).
 rem
-rem Today -DGRAPHLINT_WITH_CUDA=ON stops the configure with "CUDA source lands in
-rem M2": expected, not a broken script.
+rem Two options on purpose: GRAPHLINT_WITH_CUDA builds src/cuda_source.cpp with
+rem cudart only; GRAPHLINT_BUILD_DEVICE_TESTS adds nvcc, the demo and the GPU suite.
 rem
-rem Usage:  build-device.bat <configure|build|test|clean> [build-dir]
+rem Usage:  build-device.bat <configure|build|demo|test|clean> [build-dir]
+rem    demo        run demo_graph, which rewrites graphs/*.json in the source tree
 rem ---------------------------------------------------------------------------
 setlocal
 if "%~1"=="" goto usage
@@ -32,6 +33,7 @@ if errorlevel 1 exit /b 1
 if /i "%~1"=="clean" goto clean
 if /i "%~1"=="configure" goto configure
 if /i "%~1"=="build" goto build
+if /i "%~1"=="demo" goto demo
 if /i "%~1"=="test" goto test
 goto usage
 
@@ -41,11 +43,16 @@ cmake -S "%~dp0." -B "%BUILD%" -G Ninja ^
     "-DCMAKE_CUDA_COMPILER=%CUDA_NVCC%" ^
     -DCMAKE_CUDA_ARCHITECTURES=75 ^
     -DGRAPHLINT_BUILD_TESTS=ON ^
-    -DGRAPHLINT_WITH_CUDA=ON
+    -DGRAPHLINT_WITH_CUDA=ON ^
+    -DGRAPHLINT_BUILD_DEVICE_TESTS=ON
 exit /b %errorlevel%
 
 :build
 cmake --build "%BUILD%"
+exit /b %errorlevel%
+
+:demo
+"%BUILD%\demo_graph.exe"
 exit /b %errorlevel%
 
 :test
@@ -57,5 +64,5 @@ if exist "%BUILD%" rmdir /s /q "%BUILD%"
 exit /b 0
 
 :usage
-echo Usage: %~nx0 ^<configure^|build^|test^|clean^> [build-dir]
+echo Usage: %~nx0 ^<configure^|build^|demo^|test^|clean^> [build-dir]
 exit /b 2

@@ -14,12 +14,21 @@ option(GRAPHLINT_BUILD_TESTS "Build the host test suite (fetches GoogleTest)" ON
 option(GRAPHLINT_WITH_CUDA "Build the cudaGraph_t conversion in src/cuda_source.cpp" OFF)
 # Fetches cuda-timer for tools/bench.cu; arrives in M7.
 option(GRAPHLINT_BUILD_BENCH "Build the instantiate/launch benchmark (needs a GPU)" OFF)
+# Two knobs on purpose: the library needs cudart only, nvcc and a GPU are needed
+# only to regenerate graphs/*.json and to run the suite that opens a handle.
+option(GRAPHLINT_BUILD_DEVICE_TESTS "Build tests/device: demo_graph and the GPU suite" OFF)
 
-if(GRAPHLINT_WITH_CUDA)
+if(GRAPHLINT_BUILD_DEVICE_TESTS AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
-        "CUDA source lands in M2: src/cuda_source.cpp is the only translation unit "
-        "that includes <cuda_runtime.h>, and it does not exist yet. Configure with "
-        "-DGRAPHLINT_WITH_CUDA=OFF (the default) to build and test the host-only core.")
+        "GRAPHLINT_BUILD_DEVICE_TESTS=ON needs GRAPHLINT_WITH_CUDA=ON: the device "
+        "suite reads graphs through src/cuda_source.cpp. Configure with "
+        "-DGRAPHLINT_WITH_CUDA=ON, or turn the device tests off.")
+endif()
+
+if(GRAPHLINT_BUILD_DEVICE_TESTS AND NOT GRAPHLINT_BUILD_TESTS)
+    message(FATAL_ERROR
+        "GRAPHLINT_BUILD_DEVICE_TESTS=ON is a test suite: configure with "
+        "-DGRAPHLINT_BUILD_TESTS=ON as well.")
 endif()
 
 if(GRAPHLINT_BUILD_BENCH)
@@ -31,6 +40,10 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Only used once enable_language(CUDA) runs; the demo's host half is C++17 too.
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Needed before the exported target names the include subdirectory.
 include(GNUInstallDirs)
@@ -89,6 +102,23 @@ target_include_directories(graphlint INTERFACE
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_compile_features(graphlint INTERFACE cxx_std_17)
+
+# ---------------------------------------------------------------------------
+# CUDA reader (src/cuda_source.cpp)
+#
+# Host-only C++: CUDAToolkit for the headers and cudart, no CUDA language and no
+# nvcc. This is the promise README makes: a host job can build the reader.
+# ---------------------------------------------------------------------------
+if(GRAPHLINT_WITH_CUDA)
+    find_package(CUDAToolkit REQUIRED)
+
+    add_library(graphlint_cuda STATIC src/cuda_source.cpp)
+    add_library(graphlint::cuda ALIAS graphlint_cuda)
+    # PUBLIC: cuda_source.hpp includes <cuda_runtime_api.h> and the library's
+    # users are the ones supplying the handle and the runtime.
+    target_link_libraries(graphlint_cuda PUBLIC graphlint::graphlint CUDA::cudart)
+    graphlint_apply_warnings(graphlint_cuda)
+endif()
 
 # ---------------------------------------------------------------------------
 # Tests (host-only: no CUDA toolkit, no GPU, no nvcc)
@@ -162,6 +192,37 @@ if(GRAPHLINT_BUILD_TESTS)
     target_compile_definitions(graphlint_test_json PRIVATE
         GRAPHLINT_ENABLE_ASSERTS=1
         GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs")
+
+    # -----------------------------------------------------------------------
+    # demo_check reads graphs/*.json with no CUDA at all: it is registered here,
+    # in the host-only block, so the free CI job validates the committed
+    # artifacts. demo_graph, which regenerates them, needs a GPU (below).
+    # -----------------------------------------------------------------------
+    graphlint_add_test(demo_check tests/device/demo_check.cpp)
+    target_compile_definitions(demo_check PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
+
+    if(GRAPHLINT_BUILD_DEVICE_TESTS)
+        if(NOT CMAKE_CUDA_ARCHITECTURES)
+            set(CMAKE_CUDA_ARCHITECTURES 75 CACHE STRING
+                "Architecture of the demo kernels; override for another card")
+        endif()
+        enable_language(CUDA)
+
+        add_executable(demo_graph tests/device/demo_graph.cu)
+        target_link_libraries(demo_graph PRIVATE graphlint_cuda)
+        target_compile_definitions(demo_graph PRIVATE
+            GRAPHLINT_ENABLE_ASSERTS=1
+            GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
+        graphlint_apply_cuda_warnings(demo_graph)
+
+        # Device code needs nvcc (the kernel), the main is host-only and returns 77
+        # without a card, which ctest reports as SKIPPED.
+        graphlint_add_device_test(graphlint_test_cuda tests/device/test_cuda_source.cu)
+        target_link_libraries(graphlint_test_cuda PRIVATE graphlint_cuda)
+        target_compile_definitions(graphlint_test_cuda PRIVATE GRAPHLINT_ENABLE_ASSERTS=1)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -169,9 +230,11 @@ endif()
 # ---------------------------------------------------------------------------
 include(CMakePackageConfigHelpers)
 
+# cuda_source.hpp is installed only when graphlint_cuda is exported (M6): until
+# then the header would declare from_cuda with no target to link it from.
 install(DIRECTORY include/graphlint
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp"
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "cuda_source.hpp" EXCLUDE
 )
 
 install(TARGETS graphlint EXPORT graphlintTargets)
