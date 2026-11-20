@@ -40,6 +40,7 @@ compile_commands.json
 # Logs from local runs
 *.log
 
-# Local-only handoff: decisions that matter go into docs/, this file does not ship
+# Local-only working notes: what matters goes into docs/, these do not ship
 HANDOFF.md
 *_REVIEW.md
+PLAN_*.md
