@@ -127,13 +127,15 @@ GCC fails with `-Werror=unused-result`, so the `(void)` cast goes in the same co
 
 ## 10. How to check a file is in order
 
-From the repo root, in Git Bash. Items 1, 2 and 7 need the tree from M2; before that they print nothing.
+From the repo root, in Git Bash. Every command reads tracked files only (`git grep`, `git ls-files`): a
+build directory in the working tree must not change the answer. Items 1, 2 and 7 have nothing to read
+until M2.
 
-1. Comment blocks over 3 lines: `find include src -name '*.[ch]*' 2>/dev/null | xargs -r awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\/\*|\*)/{if(++n>3)print FILENAME":"FNR;next}{n=0}'`
-2. Comment density: `find include src -name '*.[ch]*' -type f 2>/dev/null | xargs -r cat | awk 'NF{t++} /^[[:space:]]*(\/\/|\/\*|\*)/{c++} END{printf "%.1f%%\n", t ? 100*c/t : 0}'` — ≤ 10.0%.
-3. Blacklist words: `grep -rniE 'robust|comprehensive|seamless|guarantee[sd]?|key takeaway|why this matters|in summary|effective' README.md CHANGELOG.md docs include src --exclude=CONVENTIONS.md 2>/dev/null` — zero.
-4. Duplication: `grep -c '<six-word phrase>' README.md docs/*.md CHANGELOG.md 2>/dev/null` — one file only, non-zero.
-5. `grep -rnE '[A-Za-z]:[\\/]|/Users/|Simone' --exclude=LICENSE --exclude=HANDOFF.md --exclude=CONVENTIONS.md --exclude-dir=experiments --exclude-dir=.git .` — zero.
-6. `grep -rnE 'TEST\([^,]+, *(Test[0-9]+|Works|Basic)\)' tests 2>/dev/null` — zero.
-7. `grep -n 'Wpedantic' CMakeLists.txt 2>/dev/null`: the line does not reach the `.cu` targets, and the build stays green with `-Werror`.
-8. `git show --stat HEAD`: if it lists every folder, it is not one logical unit and the commit gets split.
+1. Comment blocks over 3 lines: `git ls-files 'include/**' 'src/**' | xargs -r awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\/\*|\*)/{if(++n>3)print FILENAME":"FNR;next}{n=0}'` — zero.
+2. Comment density: `git ls-files 'include/**' 'src/**' | xargs -r cat | awk 'NF{t++} /^[[:space:]]*(\/\/|\/\*|\*)/{c++} END{printf "%.1f%%\n", t ? 100*c/t : 0}'` — ≤ 10.0%.
+3. Blacklist words: `git grep -niE 'robust|comprehensive|seamless|guarantee[sd]?|key takeaway|why this matters|in summary|effective' -- README.md docs include src ':!docs/CONVENTIONS.md'` — zero.
+4. Duplication: `git grep -c '<six-word phrase>'` — one file, count greater than zero.
+5. Absolute paths and the account name: `git grep -nE '(^|[^A-Za-z])[A-Za-z]:[\\/]|/Users/|Simone' -- ':!LICENSE' ':!docs/CONVENTIONS.md'` — zero. The `[^A-Za-z]` boundary is what keeps `https://` out; without it the check never passes.
+6. Lazy test names: `git grep -nE 'TEST\([^,]+, *(Test[0-9]+|Works|Basic)\)' -- tests` — zero.
+7. `git grep -n 'Wpedantic' -- CMakeLists.txt`: the line does not reach the `.cu` targets, and the build stays green with `-Werror`.
+8. `git show --stat HEAD`: if it lists every directory, it is not one logical unit and the commit gets split.
