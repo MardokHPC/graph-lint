@@ -18,6 +18,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   header is not installed yet, so `find_package(graphlint CONFIG)` sees the model and JSON headers
   only.
 - `tests/device/demo_graph.cu`: four shapes read from real handles and written to `graphs/`.
+- `topology`: levels, depth, width per level and the transitive reduction, with the reduction
+  checked against an independent naive reference on small graphs. Pure host code.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.

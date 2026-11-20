@@ -4,14 +4,15 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M2 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
-v1), the `cudaGraph_t` reader, the demo that produced the four artifacts in `graphs/`, and CI. The
-rules, the DOT and Mermaid emitters, the two command-line tools and the benchmark are not here:
-nothing in this tree lints a graph today.
+M0 to M3 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
+v1), the `cudaGraph_t` reader, the topology analysis, the demo that produced the four artifacts in
+`graphs/`, and CI. The rules, the DOT and Mermaid emitters, the two command-line tools and the
+benchmark are not here: nothing in this tree lints a graph today.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
-`cudaGraph_t` into `graphlint::Graph` with `from_cuda`, and write or parse that model as JSON with
-`dump_graph` and `parse_graph`.
+`cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
+`dump_graph` and `parse_graph`, and compute depth, width per level, the transitive reduction and
+the minimal DAG with `topology`.
 
 ## What it is
 
@@ -55,9 +56,9 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 43 GoogleTest cases in 4 ctest entries (`config` 3,
-`graph` 7, `json` 28, `demo_check` 5). `build-host.bat test` runs them; `ctest --test-dir build-host -V`
-prints the per-binary `N tests from ... ran` lines that add up to 43.
+The host suite needs no CUDA toolkit and no GPU: 73 GoogleTest cases in 5 ctest entries (`config` 3,
+`graph` 7, `json` 28, `analysis` 30, `demo_check` 5). `build-host.bat test` runs them;
+`ctest --test-dir build-host -V` prints the per-binary `N tests from ... ran` lines that add up to 73.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -72,9 +73,10 @@ card the binary exits 77 and ctest reports the entry SKIPPED:
 
 `demo_check`, a host ctest entry, re-asserts nodes and edges from the committed files and checks
 that parsing then dumping each one returns the same bytes; `wc -c graphs/*.json` gives the byte
-counts. Depth and the redundant count were measured on the same four shapes by the M0 spike
-(`experiments/m0_graph/run.bat`, output pasted in its REPORT); no test in this tree computes them
-yet, `analysis.hpp` arrives with M3.
+counts. Depth and the redundant count are asserted by `graphlint_test_analysis`, which reads the
+same four files with no GPU, and for the three small shapes the same numbers are recomputed by a
+separate naive reference inside the test, so they do not depend on the spike that first measured
+them.
 
 `build-device.bat demo` regenerates the four files. Two consecutive runs produced the same SHA256
 for all four (`sha256sum graphs/*.json` before and after the second run). They were generated on one
@@ -123,6 +125,7 @@ Tracked files only; `build*/` trees are ignored.
 ```text
 graph-lint/
 ├── include/graphlint/
+│   ├── analysis.hpp
 │   ├── config.hpp
 │   ├── cuda_source.hpp
 │   ├── graph.hpp
@@ -144,6 +147,7 @@ graph-lint/
 │   │   ├── demo_check.cpp
 │   │   ├── demo_graph.cu
 │   │   └── test_cuda_source.cu
+│   ├── test_analysis.cpp
 │   ├── test_config.cpp
 │   ├── test_graph.cpp
 │   ├── test_json.cpp
