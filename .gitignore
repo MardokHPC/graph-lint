@@ -1,0 +1,45 @@
+# Build trees: build-host, build-dev, build-alt, and anything else named build*.
+build*/
+out/
+
+# IDE / editor state
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Compiler / linker artifacts, including what experiments/m0_graph regenerates
+# (shape.exe, shape.lib, shape.exp)
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.idb
+
+# nvcc intermediates (tmpxft_*, *.cudafe*, *.fatbin)
+*.cudafe*
+tmpxft_*
+*.fatbin
+
+# CMake bookkeeping when someone configures in-source
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+_deps/
+CMakeUserPresets.json
+compile_commands.json
+
+# Logs from local runs
+*.log
+
+# Local-only handoff: decisions that matter go into docs/, this file does not ship
+HANDOFF.md
+*_REVIEW.md

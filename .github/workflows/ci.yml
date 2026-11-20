@@ -1,0 +1,158 @@
+# graph-lint CI.
+#
+# One job runs today: host-only, no CUDA toolkit and no nvcc. The core is pure
+# C++17, so a free runner with no GPU is the proof that it is testable
+# everywhere. The CUDA matrix and the self-hosted GPU job are written at the
+# bottom but commented out: there is no CUDA translation unit to compile until
+# M2, and -DGRAPHLINT_WITH_CUDA=ON is a configure-time error by design today.
+
+name: CI
+
+"on":
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_BUILD_TYPE: Release
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. No CUDA, no nvcc, no GPU.
+  # ---------------------------------------------------------------------------
+  host-only:
+    name: host-only (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Ninja needs cl.exe on PATH on Windows; the runner's default shell keeps
+      # this ahead of Git's own link.exe (passing through bash would not).
+      - name: Setup MSVC developer command prompt (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Toolchain
+        shell: bash
+        run: |
+          cmake --version
+          ninja --version
+
+      # -DGRAPHLINT_WITH_CUDA=OFF is the default, stated on purpose: this job must
+      # fail if the core ever grows a dependency on the toolkit. GoogleTest is
+      # fetched by CMake only when tests are enabled, pinned to a tag.
+      - name: Configure (host-only, tests ON)
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DGRAPHLINT_BUILD_TESTS=ON
+          -DGRAPHLINT_WITH_CUDA=OFF
+
+      - name: Build (warnings are errors)
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 600
+
+      # The exported target, the include dir and the version file are the M1
+      # deliverable: installing the package and building a separate consumer is
+      # the only thing that notices when M2 changes them. The consumer is not
+      # part of the main build (no add_subdirectory): it must find the package.
+      - name: Install the package into a scratch prefix
+        run: cmake --install build --prefix "${{ runner.temp }}/gl" --config Release
+
+      - name: Configure the consumer (find_package on the installed tree)
+        run: >
+          cmake -S tests/consumer -B build-consumer -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_PREFIX_PATH=${{ runner.temp }}/gl"
+
+      - name: Build and run the consumer
+        run: |
+          cmake --build build-consumer
+          ctest --test-dir build-consumer --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # 2. CUDA: matrix ready, commented out until M2.
+  #
+  # What is missing, concretely:
+  #   * src/cuda_source.cpp, the only translation unit that includes
+  #     <cuda_runtime.h>. Until it exists, -DGRAPHLINT_WITH_CUDA=ON is a
+  #     FATAL_ERROR in CMakeLists.txt ("CUDA source lands in M2"), so this job
+  #     would be red at configure for the right reason and still red;
+  #   * tests/device/demo_graph.cu, the fixture that makes an nvcc build worth a
+  #     runner: compiling zero .cu files proves nothing about the CUDA path;
+  #   * the GPU job below needs a self-hosted runner with a real card. Hosted
+  #     runners have none, and every device suite exits 77 (SKIP_RETURN_CODE), so
+  #     a green tick there would hide tests that never ran.
+  #
+  # When M2 lands, uncomment and re-check:
+  #   - ubuntu 11.8 / 12.1 and windows 12.9, installed by Jimver/cuda-toolkit;
+  #   - on Windows NVCC_PREPEND_FLAGS=--allow-unsupported-compiler, because the
+  #     image's MSVC is newer than the toolkit's version table knows;
+  #   - no GPU on the hosted runners: the point is that the core still compiles
+  #     and the host test suite stays green next to nvcc.
+  #
+  # cuda:
+  #   name: cuda (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - { os: ubuntu-22.04, cuda: "11.8.0", nvcc_prepend: "" }
+  #         - { os: ubuntu-22.04, cuda: "12.1.1", nvcc_prepend: "" }
+  #         - { os: windows-2022, cuda: "12.9.2", nvcc_prepend: "--allow-unsupported-compiler" }
+  #   env:
+  #     NVCC_PREPEND_FLAGS: ${{ matrix.nvcc_prepend }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v5
+  #     - name: Setup MSVC developer command prompt (Windows only)
+  #       if: runner.os == 'Windows'
+  #       uses: ilammy/msvc-dev-cmd@v1
+  #     - name: Install CUDA ${{ matrix.cuda }}
+  #       uses: Jimver/cuda-toolkit@v0.2.36
+  #       with:
+  #         cuda: ${{ matrix.cuda }}
+  #         method: network
+  #     - name: Configure (CUDA ON, tests ON)
+  #       run: >
+  #         cmake -S . -B build -G Ninja
+  #         -DCMAKE_BUILD_TYPE=Release
+  #         -DCMAKE_CUDA_ARCHITECTURES=75
+  #         -DGRAPHLINT_BUILD_TESTS=ON
+  #         -DGRAPHLINT_WITH_CUDA=ON
+  #     - name: Build (warnings are errors, headers included)
+  #       run: cmake --build build
+  #     - name: Test
+  #       run: ctest --test-dir build --output-on-failure --timeout 600
+  #
+  # gpu:
+  #   name: gpu (self-hosted, real device)
+  #   runs-on: [self-hosted, gpu]
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v5
+  #     - name: Configure (CUDA ON, tests ON)
+  #       run: >
+  #         cmake -S . -B build -G Ninja
+  #         -DCMAKE_BUILD_TYPE=Release
+  #         -DCMAKE_CUDA_ARCHITECTURES=75
+  #         -DGRAPHLINT_BUILD_TESTS=ON
+  #         -DGRAPHLINT_WITH_CUDA=ON
+  #     - name: Build
+  #       run: cmake --build build
+  #     - name: Test (device suites must PASS here, not skip)
+  #       run: ctest --test-dir build --output-on-failure --timeout 900

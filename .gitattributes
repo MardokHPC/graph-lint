@@ -1,0 +1,34 @@
+# Sources and docs are LF everywhere: the committed JSON/DOT artifacts have to
+# diff byte-for-byte across platforms, and CRLF would rewrite every line.
+* text=auto eol=lf
+
+*.hpp text eol=lf
+*.cpp text eol=lf
+*.cu text eol=lf
+*.h text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.cmake text eol=lf
+*.in text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+LICENSE text eol=lf
+CMakeLists.txt text eol=lf
+
+# Batch helpers are CRLF: cmd.exe parses a LF-only .bat unreliably, and these
+# two files are the documented way to build.
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.zip binary
+
+# --- GitHub language bar ---------------------------------------------------
+# The bar describes the code. Documentation is documentation, the M0 experiment
+# and the committed graph artifacts are generated output, and two batch wrappers
+# are not a language.
+docs/**          linguist-documentation
+experiments/**   linguist-generated
+graphs/**        linguist-generated
+*.bat            linguist-detectable=false
