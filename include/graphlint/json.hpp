@@ -242,8 +242,13 @@ inline void append_utf8(std::string& out, std::uint32_t code) {
     } else if (code < 0x800) {
         out += static_cast<char>(0xc0u | (code >> 6));
         out += static_cast<char>(0x80u | (code & 0x3fu));
-    } else {
+    } else if (code < 0x10000) {
         out += static_cast<char>(0xe0u | (code >> 12));
+        out += static_cast<char>(0x80u | ((code >> 6) & 0x3fu));
+        out += static_cast<char>(0x80u | (code & 0x3fu));
+    } else {
+        out += static_cast<char>(0xf0u | (code >> 18));
+        out += static_cast<char>(0x80u | ((code >> 12) & 0x3fu));
         out += static_cast<char>(0x80u | ((code >> 6) & 0x3fu));
         out += static_cast<char>(0x80u | (code & 0x3fu));
     }
@@ -348,6 +353,22 @@ private:
         return false;
     }
 
+    [[nodiscard]] bool parse_hex4(std::uint32_t& code) {
+        code = 0;
+        for (int i = 0; i < 4; ++i) {
+            if (pos_ >= text_.size()) {
+                return fail(GraphErrorKind::Syntax, pos_, "truncated \\u escape");
+            }
+            const int digit = hex_digit(text_[pos_]);
+            if (digit < 0) {
+                return fail(GraphErrorKind::Syntax, pos_, "invalid \\u escape");
+            }
+            code = code * 16 + static_cast<std::uint32_t>(digit);
+            ++pos_;
+        }
+        return true;
+    }
+
     [[nodiscard]] bool parse_string(std::string& out) {
         if (peek() != '"') {
             return fail(GraphErrorKind::WrongType, pos_, "expected a string");
@@ -382,19 +403,34 @@ private:
                 case 'r': out += '\r'; break;
                 case 't': out += '\t'; break;
                 case 'u': {
-                    std::uint32_t code = 0;
-                    for (int i = 0; i < 4; ++i) {
-                        if (pos_ >= text_.size()) {
-                            return fail(GraphErrorKind::Syntax, pos_, "truncated \\u escape");
-                        }
-                        const int digit = hex_digit(text_[pos_]);
-                        if (digit < 0) {
-                            return fail(GraphErrorKind::Syntax, pos_, "invalid \\u escape");
-                        }
-                        code = code * 16 + static_cast<std::uint32_t>(digit);
-                        ++pos_;
+                    const std::size_t escape_pos = pos_ - 2;
+                    std::uint32_t high = 0;
+                    if (!parse_hex4(high)) {
+                        return false;
                     }
-                    append_utf8(out, code);
+                    if (high >= 0xd800 && high <= 0xdbff) {
+                        // RFC 8259: a high surrogate is only half a character.
+                        if (pos_ + 1 >= text_.size() || text_[pos_] != '\\' || text_[pos_ + 1] != 'u') {
+                            return fail(GraphErrorKind::Syntax, escape_pos,
+                                        "high surrogate requires a low surrogate \\udc00-\\udfff");
+                        }
+                        pos_ += 2;
+                        std::uint32_t low = 0;
+                        if (!parse_hex4(low)) {
+                            return false;
+                        }
+                        if (low < 0xdc00 || low > 0xdfff) {
+                            return fail(GraphErrorKind::Syntax, escape_pos,
+                                        "high surrogate requires a low surrogate \\udc00-\\udfff");
+                        }
+                        append_utf8(out, 0x10000u + ((high - 0xd800u) << 10) + (low - 0xdc00u));
+                        break;
+                    }
+                    if (high >= 0xdc00 && high <= 0xdfff) {
+                        return fail(GraphErrorKind::Syntax, escape_pos,
+                                    "low surrogate without a preceding high surrogate");
+                    }
+                    append_utf8(out, high);
                     break;
                 }
                 default:
@@ -611,8 +647,9 @@ private:
     }
 
     [[nodiscard]] bool parse_graph_object(RawGraph& raw, std::size_t depth, bool root) {
-        if (depth > 8) {
-            return fail(GraphErrorKind::TooDeep, pos_, "graph nesting deeper than 8");
+        if (depth > static_cast<std::size_t>(k_max_graph_depth)) {
+            return fail(GraphErrorKind::TooDeep, pos_,
+                        "graph nesting deeper than " + std::to_string(k_max_graph_depth));
         }
         raw.object_pos = pos_;
         bool has_children = false;

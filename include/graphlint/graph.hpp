@@ -24,6 +24,9 @@ enum class GraphErrorKind { None, SchemaVersion, Syntax, Trailing, UnknownKey, D
                             FieldForType, IdNotDense, EdgeBackwards, EdgeOutOfRange,
                             ChildMismatch, WeightRule, TooDeep, Cycle };
 
+// The document's nesting bound: the root is level 1, so seven child graphs fit.
+inline constexpr int k_max_graph_depth = 8;
+
 struct Node {
     int id = -1;
     NodeType type = NodeType::Unknown;

@@ -69,6 +69,11 @@ std::string two_kernel_nodes() {
            R"({"block": [1, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel"}])";
 }
 
+std::string named_kernel(const std::string& escaped_name) {
+    return "[{\"block\": [1, 1, 1], \"grid\": [1, 1, 1], \"id\": 0, \"name\": \"" + escaped_name +
+           "\", \"type\": \"kernel\"}]";
+}
+
 graphlint::Graph sentinel_graph() {
     graphlint::Graph graph;
     graphlint::Node node;
@@ -427,4 +432,32 @@ TEST(Json, EscapesQuotesBackslashesAndControlBytes) {
     ASSERT_TRUE(graphlint::parse_graph(text, parsed, error));
     EXPECT_EQ(parsed.nodes[0].name, node.name);
     EXPECT_TRUE(parsed == graph);
+}
+
+TEST(Json, SurrogatesMustBePaired) {
+    graphlint::Graph out;
+    graphlint::GraphError error;
+
+    EXPECT_FALSE(graphlint::parse_graph(document(named_kernel("\\ud800")), out, error));
+    EXPECT_EQ(error.kind, graphlint::GraphErrorKind::Syntax);
+    EXPECT_NE(error.detail.find("low surrogate"), std::string::npos) << error.detail;
+
+    EXPECT_FALSE(graphlint::parse_graph(document(named_kernel("\\ud800\\u0041")), out, error));
+    EXPECT_EQ(error.kind, graphlint::GraphErrorKind::Syntax);
+    EXPECT_NE(error.detail.find("low surrogate"), std::string::npos) << error.detail;
+
+    EXPECT_FALSE(graphlint::parse_graph(document(named_kernel("\\udc00")), out, error));
+    EXPECT_EQ(error.kind, graphlint::GraphErrorKind::Syntax);
+    EXPECT_NE(error.detail.find("high surrogate"), std::string::npos) << error.detail;
+
+    // U+1F600: the pair becomes four UTF-8 bytes and survives a round trip.
+    graphlint::Graph pair;
+    ASSERT_TRUE(graphlint::parse_graph(document(named_kernel("\\ud83d\\ude00")), pair, error))
+        << error.line << ":" << error.column << " " << error.detail;
+    EXPECT_EQ(pair.nodes[0].name, "\xf0\x9f\x98\x80");
+    const std::string dumped = graphlint::dump_graph(pair);
+    EXPECT_NE(dumped.find("\xf0\x9f\x98\x80"), std::string::npos);
+    graphlint::Graph reloaded;
+    ASSERT_TRUE(graphlint::parse_graph(dumped, reloaded, error)) << error.detail;
+    EXPECT_TRUE(reloaded == pair);
 }
