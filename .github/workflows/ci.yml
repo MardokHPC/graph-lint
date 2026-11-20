@@ -1,10 +1,9 @@
 # graph-lint CI.
 #
-# One job runs today: host-only, no CUDA toolkit and no nvcc. The core is pure
-# C++17, so a free runner with no GPU is the proof that it is testable
-# everywhere. The CUDA matrix and the self-hosted GPU job are written at the
-# bottom but commented out: there is no CUDA translation unit to compile until
-# M2, and -DGRAPHLINT_WITH_CUDA=ON is a configure-time error by design today.
+# Two jobs run: host-only builds and tests the pure C++17 core with no CUDA
+# toolkit, cuda compiles the CUDA path (src/cuda_source.cpp, the device suites,
+# the demo) with nvcc. Hosted runners have no GPU, so the CUDA job compiles but
+# does not execute: the device suites exit 77 and ctest reports them SKIPPED.
 
 name: CI
 
@@ -84,74 +83,86 @@ jobs:
           ctest --test-dir build-consumer --output-on-failure
 
   # ---------------------------------------------------------------------------
-  # 2. CUDA: matrix ready, commented out until M2.
+  # 2. CUDA: compiles, never executes. Builds the only TU that includes
+  #    <cuda_runtime.h>, the device suites and the demo with nvcc, so a break in
+  #    the CUDA path is red at build time on a free runner. There is no card
+  #    here: every device suite exits 77 (SKIP_RETURN_CODE), ctest prints "The
+  #    following tests did not run" and reports SKIPPED. That is not tolerated
+  #    with continue-on-error: a build failure, or a missing toolkit, must fail
+  #    the job; only a built binary with no device is allowed to skip.
   #
-  # What is missing, concretely:
-  #   * src/cuda_source.cpp, the only translation unit that includes
-  #     <cuda_runtime.h>. Until it exists, -DGRAPHLINT_WITH_CUDA=ON is a
-  #     FATAL_ERROR in CMakeLists.txt ("CUDA source lands in M2"), so this job
-  #     would be red at configure for the right reason and still red;
-  #   * tests/device/demo_graph.cu, the fixture that makes an nvcc build worth a
-  #     runner: compiling zero .cu files proves nothing about the CUDA path;
-  #   * the GPU job below needs a self-hosted runner with a real card. Hosted
-  #     runners have none, and every device suite exits 77 (SKIP_RETURN_CODE), so
-  #     a green tick there would hide tests that never ran.
-  #
-  # When M2 lands, uncomment and re-check:
+  # Notes on the matrix:
   #   - ubuntu 11.8 / 12.1 and windows 12.9, installed by Jimver/cuda-toolkit;
   #   - on Windows NVCC_PREPEND_FLAGS=--allow-unsupported-compiler, because the
   #     image's MSVC is newer than the toolkit's version table knows;
-  #   - no GPU on the hosted runners: the point is that the core still compiles
-  #     and the host test suite stays green next to nvcc.
-  #
-  # cuda:
-  #   name: cuda (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
-  #   runs-on: ${{ matrix.os }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - { os: ubuntu-22.04, cuda: "11.8.0", nvcc_prepend: "" }
-  #         - { os: ubuntu-22.04, cuda: "12.1.1", nvcc_prepend: "" }
-  #         - { os: windows-2022, cuda: "12.9.2", nvcc_prepend: "--allow-unsupported-compiler" }
-  #   env:
-  #     NVCC_PREPEND_FLAGS: ${{ matrix.nvcc_prepend }}
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v5
-  #     - name: Setup MSVC developer command prompt (Windows only)
-  #       if: runner.os == 'Windows'
-  #       uses: ilammy/msvc-dev-cmd@v1
-  #     - name: Install CUDA ${{ matrix.cuda }}
-  #       uses: Jimver/cuda-toolkit@v0.2.36
-  #       with:
-  #         cuda: ${{ matrix.cuda }}
-  #         method: network
-  #     - name: Configure (CUDA ON, tests ON)
-  #       run: >
-  #         cmake -S . -B build -G Ninja
-  #         -DCMAKE_BUILD_TYPE=Release
-  #         -DCMAKE_CUDA_ARCHITECTURES=75
-  #         -DGRAPHLINT_BUILD_TESTS=ON
-  #         -DGRAPHLINT_WITH_CUDA=ON
-  #     - name: Build (warnings are errors, headers included)
-  #       run: cmake --build build
-  #     - name: Test
-  #       run: ctest --test-dir build --output-on-failure --timeout 600
-  #
+  #   - CMAKE_CUDA_ARCHITECTURES=75 is the same arch the GPU box runs: sm_75 is
+  #     compiled, not executed, so the runner needs no NVIDIA hardware.
+  # ---------------------------------------------------------------------------
+  cuda:
+    name: cuda (${{ matrix.os }}, CUDA ${{ matrix.cuda }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, cuda: "11.8.0", nvcc_prepend: "" }
+          - { os: ubuntu-22.04, cuda: "12.1.1", nvcc_prepend: "" }
+          - { os: windows-2022, cuda: "12.9.2", nvcc_prepend: "--allow-unsupported-compiler" }
+    env:
+      NVCC_PREPEND_FLAGS: ${{ matrix.nvcc_prepend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup MSVC developer command prompt (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CUDA ${{ matrix.cuda }}
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: ${{ matrix.cuda }}
+          method: network
+
+      # Device tests ON on purpose: it makes nvcc compile the .cu fixtures and
+      # enable_language(CUDA), so the job proves the CUDA path instead of only
+      # compiling a host TU against the headers.
+      - name: Configure (CUDA ON, tests ON, device tests ON)
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CUDA_ARCHITECTURES=75
+          -DGRAPHLINT_BUILD_TESTS=ON
+          -DGRAPHLINT_WITH_CUDA=ON
+          -DGRAPHLINT_BUILD_DEVICE_TESTS=ON
+
+      - name: Build (warnings are errors, headers included)
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 600
+
+  # ---------------------------------------------------------------------------
+  # 3. GPU: the same build with a real card, so the device suites PASS instead
+  #    of skipping. Still commented out: no self-hosted runner with an NVIDIA
+  #    GPU is registered for this repo, and enabling it as-is would park a job
+  #    in "queued" forever. Do not replace it by relaxing job 2: a green tick
+  #    from a runner with no device hides tests that never ran.
+  # ---------------------------------------------------------------------------
   # gpu:
   #   name: gpu (self-hosted, real device)
   #   runs-on: [self-hosted, gpu]
   #   steps:
   #     - name: Checkout
   #       uses: actions/checkout@v5
-  #     - name: Configure (CUDA ON, tests ON)
+  #     - name: Configure (CUDA ON, tests ON, device tests ON)
   #       run: >
   #         cmake -S . -B build -G Ninja
   #         -DCMAKE_BUILD_TYPE=Release
   #         -DCMAKE_CUDA_ARCHITECTURES=75
   #         -DGRAPHLINT_BUILD_TESTS=ON
   #         -DGRAPHLINT_WITH_CUDA=ON
+  #         -DGRAPHLINT_BUILD_DEVICE_TESTS=ON
   #     - name: Build
   #       run: cmake --build build
   #     - name: Test (device suites must PASS here, not skip)
