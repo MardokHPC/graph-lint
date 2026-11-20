@@ -1,0 +1,24 @@
+{
+  "children": [
+    {
+      "children": [],
+      "edges": [
+        [0, 1]
+      ],
+      "nodes": [
+        {"block": [64, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel"},
+        {"block": [64, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel"}
+      ]
+    }
+  ],
+  "edges": [
+    [0, 1]
+  ],
+  "nodes": [
+    {"block": [32, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel"},
+    {"child": 0, "id": 1, "type": "child_graph"}
+  ],
+  "schema_version": 1,
+  "source": {"kind": "capture"},
+  "weight_kind": "levels"
+}

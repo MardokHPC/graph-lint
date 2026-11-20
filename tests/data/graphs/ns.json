@@ -1,0 +1,17 @@
+{
+  "children": [],
+  "edges": [
+    [0, 1],
+    [1, 2],
+    [2, 3]
+  ],
+  "nodes": [
+    {"block": [64, 1, 1], "grid": [2, 2, 1], "id": 0, "type": "kernel", "weight": 500},
+    {"alloc_bytes": 4096, "id": 1, "mem_ptr": "0x1f0000000000", "type": "mem_alloc", "weight": 0},
+    {"id": 2, "mem_ptr": "0x0", "type": "mem_free", "weight": 300},
+    {"id": 3, "type": "memcpy", "weight": 100}
+  ],
+  "schema_version": 1,
+  "source": {"kind": "capture"},
+  "weight_kind": "ns"
+}

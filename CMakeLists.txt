@@ -152,6 +152,16 @@ if(GRAPHLINT_BUILD_TESTS)
     target_compile_definitions(graphlint_test_config PRIVATE
         GRAPHLINT_TEST_CMAKE_VERSION="${PROJECT_VERSION}"
         GRAPHLINT_ENABLE_ASSERTS=1)
+
+    graphlint_add_test(graphlint_test_graph tests/test_graph.cpp)
+    graphlint_add_test(graphlint_test_json tests/test_json.cpp)
+    # dump_graph validates its input when asserts are on: every emitted document
+    # is then checked against the model invariants, not only against its bytes.
+    target_compile_definitions(graphlint_test_graph PRIVATE GRAPHLINT_ENABLE_ASSERTS=1)
+    # Fixtures are read from the source tree: mixed.json must stay the golden bytes.
+    target_compile_definitions(graphlint_test_json PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs")
 endif()
 
 # ---------------------------------------------------------------------------

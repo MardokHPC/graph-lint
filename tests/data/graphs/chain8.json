@@ -1,0 +1,25 @@
+{
+  "children": [],
+  "edges": [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+    [6, 7]
+  ],
+  "nodes": [
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 0, "name": "k0", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 1, "name": "k1", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 2, "name": "k2", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 3, "name": "k3", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 4, "name": "k4", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 5, "name": "k5", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 6, "name": "k6", "type": "kernel"},
+    {"block": [128, 1, 1], "grid": [1, 1, 1], "id": 7, "name": "k7", "type": "kernel"}
+  ],
+  "schema_version": 1,
+  "source": {"kind": "file"},
+  "weight_kind": "levels"
+}
