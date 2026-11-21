@@ -200,6 +200,13 @@ if(GRAPHLINT_BUILD_TESTS)
         GRAPHLINT_ENABLE_ASSERTS=1
         GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
 
+    graphlint_add_test(graphlint_test_rules tests/test_rules.cpp)
+    # The four committed artifacts are read from the source tree: the finding sets M4 derives
+    # must stay the ones docs/rules.md fixes, on a runner without a GPU.
+    target_compile_definitions(graphlint_test_rules PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
+
     # -----------------------------------------------------------------------
     # demo_check reads graphs/*.json with no CUDA at all: it is registered here,
     # in the host-only block, so the free CI job validates the committed
