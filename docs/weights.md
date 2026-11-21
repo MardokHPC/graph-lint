@@ -6,7 +6,7 @@ sorted keys, rows by id, LF — the grammar of `graph.json`. Complete file for `
 
 ```json
 {
-  "graph": "6f1d0c3a9b2e4d57", "node_count": 4, "schema_version": 1, "unit": "ns",
+  "graph": "a184e191b8b5ac47", "node_count": 4, "schema_version": 1, "unit": "ns",
   "weights": [[0, 200], [1, 700], [2, 300], [3, 100]]
 }
 ```
@@ -16,7 +16,7 @@ sorted keys, rows by id, LF — the grammar of `graph.json`. Complete file for `
 | `schema_version` | int | `1`; versions this table, not `graph.schema_version`; `2` refused |
 | `unit` | string | exactly `"ns"`; missing or `"us"` refused, never rescaled |
 | `node_count` | int | equals `graph.nodes.size()`; the readable half of the binding |
-| `graph` | string | 16 lowercase hex: FNV-1a over the canonical node keys and the distinct edges; the half that catches a same-size different graph |
+| `graph` | string | 16 lowercase hex: FNV-1a over one refinement round of each node's structural key and its neighbours' keys, then over the distinct edges, so a relabelled copy of the same graph hashes the same; the half that catches a same-size different graph |
 | `weights` | `[id,ns][]` | dense `0..node_count-1`, ascending, one row per id, `[0, 1e12]` |
 
 **No default, no subset.** A missing, repeated, out-of-range, negative or unsorted id is a `GraphError`
@@ -29,7 +29,8 @@ a table from another graph of the same size, which the count cannot see.
 ## 2. Applying it
 `include/graphlint/weights.hpp`, `[[nodiscard]] inline`, no I/O: `bool parse_weights(std::string_view,
 WeightsTable&, GraphError&)`, `bool apply_weights(Graph&, const WeightsTable&, GraphError&)`, `WeightsTable` a
-`std::vector<std::uint64_t>` by node id; `graphlint_report --weights <path>` reads the bytes, and a refused table is exit 2.
+`std::vector<std::uint64_t>` by node id plus the `graph` fingerprint it carries, checked against the graph;
+`graphlint_report --weights <path>` reads the bytes, and a refused table is exit 2.
 
 `apply_weights` writes `Node::weight` on every node and flips `graph.weight_kind` to `ns`. It refuses a graph
 with `children` — the file covers the root, and a child is one opaque node on the exec — and a graph already in

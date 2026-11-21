@@ -99,10 +99,11 @@ parses `report.graph`, recomputes `topology` and `lint`, and decides on those nu
 `analysis` or `findings` that disagrees yields a note, so a stale block never decides a verdict.
 
 The document depends only on `(baseline, current, thresholds)`: `verdict`; `reason`, one sentence — `depth
-grew 1 > 0`, `depth fell 1 > 0`, `all metrics inside their thresholds`, or the failed comparison;
+grew 1 > 0`, `path_ns grew 120 > 100`, `all metrics inside their thresholds`, or the failed comparison;
 `metrics`, each `{baseline, current, delta, name, status}`, in the order depth, edges_redundant,
-findings_severe, nodes, edges_distinct, width_max, findings_warn, findings_info, with `status` in
-`regression|improvement|none|context`; `thresholds`; both `environment`s; `notes`; `schema_version`.
+findings_severe, path_ns (ns pairs only), nodes, edges_distinct, width_max, findings_warn, findings_info,
+with `status` in `regression|improvement|none|context`; `thresholds`, the four values with `-1` for
+"not asked"; both `environment`s; `notes`; `schema_version`.
 
 stdout carries the document unless `--quiet`, `--json <path>` writes the same bytes, stderr one line
 `graphlint_gate: <verdict> — <reason>` always; unreadable input emits the document, `suspect`, exit 2.
