@@ -31,6 +31,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tools/emit_artifacts.cpp`, built with the tests and run by `build-host.bat artifacts`: it rewrites
   `graphs/{built,captured,pingpong,chain}.{dot,mmd}` from the four committed JSON, and the suite and
   the README figure are compared with those files byte for byte.
+- `report.json`, schema v1 (`docs/report.md`): the graph, the analysis, the findings, the
+  applicability list and the environment, written by `graphlint_report`. `graphlint_gate` reads it
+  back, recomputes the analysis from the embedded graph and exits 0, 1 or 2: pass, regression,
+  suspect. Thresholds on depth, implied edges and severe findings are absolute integers; the gate
+  never trusts a declared analysis block to decide.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.

@@ -22,18 +22,17 @@ build-device.bat test
 set CUDA_VISIBLE_DEVICES=-1 && ctest --test-dir build-dev --output-on-failure
 ```
 
-1. Host build, `GRAPHLINT_WITH_CUDA=OFF`: 43 cases in 4 ctest entries (the three host suites
-   plus `demo_check`), all green, no CUDA toolkit involved. The core needs nothing, and the
-   committed artifacts are verified on every host build.
+1. Host build, `GRAPHLINT_WITH_CUDA=OFF`: the host suite, all green, no CUDA toolkit involved.
+   The core needs nothing, and the committed artifacts are verified on every host build.
 2. Device build, `GRAPHLINT_WITH_CUDA=ON` + `GRAPHLINT_BUILD_DEVICE_TESTS=ON`: zero warnings
    with `/W4 /WX` on the host TUs and `-Xcompiler=/W4 -Xcompiler=/WX` on the `.cu` files
    (no `-Wpedantic`, as agreed: nvcc's `#line` directives are not ours).
-3. `ctest` on the GPU box: 5/5 green — the four host entries plus `graphlint_test_cuda`
+3. `ctest` on the GPU box: green — the host entries plus `graphlint_test_cuda`
    (5 cases: chain + geometry, `cudaMallocAsync` alloc/free nodes, child graph, the depth
    bound, live capture 25/29).
-4. Same `ctest` with no visible card: `graphlint_test_cuda` exits 77, ctest prints
-   `5/5 ... ***Skipped` and `(Skipped)`, exit code 0. The four host entries, `demo_check`
-   included, still run: none of them opens a handle.
+4. Same `ctest` with no visible card: `graphlint_test_cuda` exits 77, ctest prints the entry
+   `***Skipped`, exit code 0. The host entries, `demo_check` included, still run: none of them
+   opens a handle.
 
 ## What was read, per shape
 

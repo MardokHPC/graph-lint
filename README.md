@@ -4,17 +4,17 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M5 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
+M0 to M6 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
 v1), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters, the
-demo that produced the four artifacts in `graphs/`, and CI. The two command-line tools and the
-benchmark are not here: the library lints a graph and draws it, and there is still no command that
-does either from a shell.
+report, the CI gate and the two command-line tools, the demo that produced the four artifacts in
+`graphs/`, and CI. The benchmark and the worked example are not here.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
 `dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction and the
-minimal DAG with `topology`, turn all of it into findings with `lint`, and render the graph as DOT
-or Mermaid with `to_dot` and `to_mermaid`.
+minimal DAG with `topology`, turn all of it into findings with `lint`, render the graph as DOT or
+Mermaid with `to_dot` and `to_mermaid`, and from a shell produce a report with `graphlint_report`
+and compare two reports with `graphlint_gate`, which exits 0, 1 or 2.
 
 ## What it is
 
@@ -25,8 +25,10 @@ edges a transitive reduction removes and the minimal DAG that remains, the synch
 timestamp and no local path, so a report is a diffable artifact.
 
 The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `analysis.hpp` and the
-rules in `rules.hpp` are what that report will be built from. They exist today; the report does not.
-What each rule measures, and the case where it must stay silent, is `docs/rules.md`.
+rules in `rules.hpp` are what a report is built from, and `report.json` is their first consumer:
+`graphlint_report` writes it, `graphlint_gate` compares two of them and recomputes the analysis from
+the embedded graph, so a stale block cannot decide a verdict (`docs/report.md`). What each rule
+measures, and the case where it must stay silent, is `docs/rules.md`.
 
 The drawing below is `to_mermaid` of `graphs/captured.json`: four chains of three kernels are one
 box each (`kernel#4×3`, `kernel#7×3`, `kernel#10×3`, `kernel#13×3`), the one dashed edge is a pair
@@ -84,6 +86,12 @@ before deciding where to split a stream. For the team comparing two graph versio
 difference as a file in a review. For the reviewer who has to explain what changed in a graph
 without reading a list of node handles.
 
+    graphlint_report graphs/pingpong.json --format json --out current.json
+    graphlint_gate --baseline baseline.json --current current.json
+
+Exit 0 means the topology did not get worse, 1 means it did, 2 means the two reports cannot be
+compared - another schema, another source kind, nanoseconds before the weights exist.
+
 ## Limits
 
 A level is a dependency, not a time. The reader sees the template, not the instantiated graph:
@@ -93,12 +101,13 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 148 GoogleTest cases in 8 ctest entries
-(`config` 3, `graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `demo_check` 5).
-`build-host.bat test` runs them; `ctest --test-dir build-host -V` prints the per-binary
-`N tests from ... ran` lines that add up to 148. The eighth entry, `artifacts_locale`, is not a
-GoogleTest binary: it reruns `emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and
-`TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
+The host suite needs no CUDA toolkit and no GPU: 183 GoogleTest cases in nine binaries (`config` 3,
+`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 16, `gate` 19, `demo_check`
+5). ctest runs 25 entries: those nine, `artifacts_locale`, and fifteen process-level entries that run
+the two tools and assert exit codes, stderr and byte equality. `ctest --test-dir build-host -V`
+prints the per-binary counts. `artifacts_locale` is not a GoogleTest binary: it reruns
+`emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares
+the eight files with `graphs/` byte for byte.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -147,7 +156,8 @@ time and needs no CUDA toolkit, no nvcc and no GPU:
     build-host.bat artifacts
 
 `build-host.bat artifacts` rewrites `graphs/*.dot` and `graphs/*.mmd` from the four JSON, and both
-the suite and the README figure are then compared with those files byte for byte.
+the suite and the README figure are then compared with those files byte for byte. The same build
+produces `graphlint_report` and `graphlint_gate`; the gate is the only binary that can exit 1.
 
 The reader is compiled by `GRAPHLINT_WITH_CUDA=ON` and links `cudart` only, no nvcc. It needs a
 toolkit of 11.4 or newer, where the mem-node and child-graph getters arrive. nvcc enters only with
@@ -174,8 +184,10 @@ graph-lint/
 │   ├── cuda_source.hpp
 │   ├── emit_dot.hpp
 │   ├── emit_mermaid.hpp
+│   ├── gate.hpp
 │   ├── graph.hpp
 │   ├── json.hpp
+│   ├── report.hpp
 │   └── rules.hpp
 ├── src/
 │   └── cuda_source.cpp
@@ -190,20 +202,35 @@ graph-lint/
 │   │   ├── empty.json
 │   │   ├── mixed.json
 │   │   └── ns.json
+│   ├── data/reports/
+│   │   ├── baseline.json
+│   │   ├── depth_plus_one.json
+│   │   ├── host_node.json
+│   │   ├── ns_weights.json
+│   │   ├── other_source.json
+│   │   └── truncated.json
 │   ├── device/
 │   │   ├── demo_check.cpp
 │   │   ├── demo_graph.cu
 │   │   └── test_cuda_source.cu
+│   ├── tools/
+│   │   ├── report_out.cmake
+│   │   └── run_expect.cmake
 │   ├── test_analysis.cpp
 │   ├── test_config.cpp
 │   ├── test_emitters.cpp
+│   ├── test_gate.cpp
 │   ├── test_graph.cpp
 │   ├── test_json.cpp
 │   ├── test_main.cpp
 │   ├── test_main_device.cpp
+│   ├── test_report.cpp
 │   └── test_rules.cpp
 ├── tools/
-│   └── emit_artifacts.cpp
+│   ├── emit_artifacts.cpp
+│   ├── gate.cpp
+│   ├── report.cpp
+│   └── report_core.hpp
 ├── graphs/
 │   ├── built.dot
 │   ├── built.json
@@ -222,6 +249,7 @@ graph-lint/
 │   ├── CONVENTIONS.md
 │   ├── emitters.md
 │   ├── limits.md
+│   ├── report.md
 │   └── rules.md
 ├── experiments/
 │   ├── m0_graph/
