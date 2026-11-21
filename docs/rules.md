@@ -18,6 +18,8 @@ repeats those three in memory. Surviving both: duplicate edges (kept on purpose)
 the two defects the rule still scans. Third job: when `topology()` refuses the graph, the refusal
 becomes one `error` finding with `GraphErrorKind` and `detail`, and the other six rules are
 `not_applicable` with `graph failed dag-check` — else a caller that skipped `validate` gets nothing.
+The `GraphError` reaches `lint` as a fourth argument, beside the `Topology`, because the type
+carries no error of its own; the finding is graph-level, so `nodes` is empty.
 
 **Why `error`** for a cycle or an unknown endpoint: the graph cannot be analysed at all, so that
 finding is the report's last sentence. A duplicate pair and an isolated node are `warn`: the parser
@@ -46,8 +48,8 @@ something to say.
 ## `redundant-edge` — `warn`
 **Measures** nothing itself: `Topology::edges_redundant` is the answer (the reduction is exact and
 unique on a DAG), reported against `distinct_edges` and `edges_minimal.size()`. One finding per
-graph, nodes = the sorted endpoints. Message: "10 of 21 edges are implied by a longer path; the
-minimal DAG has 11 edges".
+graph, nodes = the distinct endpoints, sorted. Message: "10 of 21 edges are implied by a longer
+path; the minimal DAG has 11 edges", with the verb following the count — `1 of 29 edges is implied`.
 
 **Never fires** without an alternative path, and the registered caveat is not the algorithm: an edge
 carrying a port (12.3+) arrives from `cudaGraphGetEdges` as a plain dependency (`limits.md`), so an
@@ -75,9 +77,11 @@ belongs to M6's gate.
 nodes in `captured.json` and `pingpong.json`) because record/wait become edges.
 
 ## `pointless-fork` — `info`
-**Measures** a node `u` with at least two successors `t != j` where every `t` reaches `j` and the
-branch through `t` holds fewer than two nodes — in practice `t→j` is the whole branch. One finding
-per `(u, j)`, nodes `{u, j}`.
+**Measures** a node `u` with at least two outgoing edges `u→t` that are minimal, where each `t` has
+a minimal edge `t→j` to the same `j`. A branch through `t` holds fewer than two nodes exactly when
+`t→j` is in the reduction: any other route would make it implied. So the rule reads
+`Topology::edges_minimal` instead of walking the graph again, and a branch `t→w→j` does not fire.
+One finding per `(u, j)`, nodes `{u, j}`.
 
 **Never fires** when the extra successor is `j`: before `t != j`, 11 of 13 firings carried `branch
 sizes: 1 0`, i.e. `u→j` existed and the rule was `redundant-edge` renamed; `pingpong.json` goes from
@@ -117,9 +121,12 @@ pairs").
 
 **Never fires** on a `mem_free` whose pointer was allocated outside the graph (legal:
 `cudaGraphAddMemFreeNode` accepts it) and never matches `mem_ptr == 0` — the getter can fail and a
-zero correlates with nothing. `not_applicable` with `no mem_alloc/mem_free node` when the graph
-declares none: a `cudaMalloc` before the capture leaves no node (`limits.md`), all four artifacts
-have 0 mem nodes, and only `tests/device/test_cuda_source.cu` exercises the rule.
+zero correlates with nothing, so such a node stays out of the sweep and out of the counts. Two
+allocations with the same pointer are paired first-in first-out in id order, and on a tie for the
+peak the first id is named, so the message is deterministic. `not_applicable` with
+`no mem_alloc/mem_free node` when the graph declares none: a `cudaMalloc` before the capture leaves
+no node (`limits.md`), all four artifacts have 0 mem nodes, and only
+`tests/device/test_cuda_source.cu` exercises the rule.
 **Reader**: free earlier or shrink the overlap; the tool cannot tell whether the allocator did.
 **Applies** to `capture` with `cudaMallocAsync`, to `built` and `file` when the mem nodes are there.
 
