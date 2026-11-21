@@ -6,29 +6,27 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M8 of nine milestones are closed: a `ns` weights table applies to the model, the critical
-path becomes the heaviest path, the gate compares `path_ns`, and a device tool measures one node at
-a time to produce the table. The tree holds the graph model, the JSON contract (schema v2 for
-reports), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters,
-the report, the CI gate and the two command-line tools, the demo that produced the four artifacts in
-`graphs/`, the worked example `examples/three_lines.cu`, and the topology document
-`docs/topology.md`.
+`graphlint_report` and `graphlint_gate` work end to end: a graph document in, a report out, and a
+verdict with exit code 0, 1 or 2. The library behind them is header-only, and the whole core builds
+without CUDA or a GPU.
 
-What works now, inside this tree: build and test the core without CUDA or a GPU, read a
-`cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
-`dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction, the
-minimal DAG and the critical path with `topology` and `critical_path`, turn all of it into findings
-with `lint`, render the graph as DOT or Mermaid with `to_dot` and `to_mermaid`, apply a measured
-weights table with `apply_weights`, and from a shell produce a report with `graphlint_report` and
-compare two reports with `graphlint_gate`, which exits 0, 1 or 2.
+- `from_cuda` reads a `cudaGraph_t` into `graphlint::Graph`; `dump_graph` and `parse_graph` write and
+  read that model as JSON, byte for byte.
+- `topology` and `critical_path` give depth, width per level, the transitive reduction and the
+  heaviest path; `lint` turns them into findings, each rule with the reason it applied or did not.
+- `to_dot` and `to_mermaid` draw the same graph deterministically; Mermaid compresses chains and
+  marks the critical path.
+- `apply_weights` applies a measured table in nanoseconds, and the report compares `path_ns`.
+- `build-host.bat` runs everything that needs no card; `build-device.bat` adds the device tests, the
+  demo, the example and the benchmark.
 
 ## What it is
 
-`graph-lint` will report the topology of a `cudaGraph_t`: depth in levels, width per level, the
-edges a transitive reduction removes and the minimal DAG that remains, the synchronization nodes
-(host callbacks, event record and wait, external semaphore), and the peak device bytes held by the
-`cudaMallocAsync` nodes. The intended contract is one document per graph, fixed key order, no
-timestamp and no local path, so a report is a diffable artifact.
+`graph-lint` reports the topology of a `cudaGraph_t`: depth in levels, width per level, the edges a
+transitive reduction removes and the minimal DAG that remains, the synchronization nodes (host
+callbacks, event record and wait, external semaphore), and the peak device bytes held by the
+`cudaMallocAsync` nodes. One document per graph, fixed key order, no timestamp and no local path, so
+a report is a diffable artifact.
 
 The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `analysis.hpp` and the
 rules in `rules.hpp` are what a report is built from, and `report.json` is their first consumer:
@@ -149,14 +147,14 @@ card the binary exits 77 and ctest reports the entry SKIPPED:
 that parsing then dumping each one returns the same bytes; `wc -c graphs/*.json` gives the byte
 counts. Depth and the redundant count are asserted by `graphlint_test_analysis`, which reads the
 same four files with no GPU, and for the three small shapes the same numbers are recomputed by a
-separate naive reference inside the test, so they do not depend on the spike that first measured
-them.
+separate naive reference inside the test: if the files and the reference disagree, the failure names
+the node or the edge.
 
 `build-device.bat demo` regenerates the four files. Two consecutive runs produced the same SHA256
 for all four (`sha256sum graphs/*.json` before and after the second run). They were generated on one
 machine: RTX 2060 SUPER (sm_75), driver 610.88 reporting CUDA API 13.3, runtime 12.6. Environment
-and full evidence: `graphs/REPORT.md`. The M0 spike measured the same numbers with a separate
-implementation (`experiments/m0_graph/REPORT.md`).
+and full evidence: `graphs/REPORT.md`. The numbers were checked against a separate implementation
+when they were first measured; `experiments/` keeps that check.
 
 `build-device.bat bench` answers the other question, what a graph pays for its dependencies: it
 builds `tools/bench.cu` against `cuda-timer` v1.2.2 and rewrites `docs/bench/bench.json`. The table
