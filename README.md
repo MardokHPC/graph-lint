@@ -4,15 +4,16 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M3 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
-v1), the `cudaGraph_t` reader, the topology analysis, the demo that produced the four artifacts in
-`graphs/`, and CI. The rules, the DOT and Mermaid emitters, the two command-line tools and the
-benchmark are not here: nothing in this tree lints a graph today.
+M0 to M4 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
+v1), the `cudaGraph_t` reader, the topology analysis, the rules, the demo that produced the four
+artifacts in `graphs/`, and CI. The DOT and Mermaid emitters, the two command-line tools and the
+benchmark are not here: the rules are a library call, and there is still no command that lints a
+graph.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
-`dump_graph` and `parse_graph`, and compute depth, width per level, the transitive reduction and
-the minimal DAG with `topology`.
+`dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction and the
+minimal DAG with `topology`, and turn all of it into findings with `lint`.
 
 ## What it is
 
@@ -22,8 +23,9 @@ edges a transitive reduction removes and the minimal DAG that remains, the synch
 `cudaMallocAsync` nodes. The intended contract is one document per graph, fixed key order, no
 timestamp and no local path, so a report is a diffable artifact.
 
-The model in `graph.hpp` and the reader in `src/cuda_source.cpp` are what that report will be
-computed from. They exist today; the report does not.
+The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `analysis.hpp` and the
+rules in `rules.hpp` are what that report will be built from. They exist today; the report does not.
+What each rule measures, and the case where it must stay silent, is `docs/rules.md`.
 
 ## What it is not
 
@@ -56,9 +58,9 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 73 GoogleTest cases in 5 ctest entries (`config` 3,
-`graph` 7, `json` 28, `analysis` 30, `demo_check` 5). `build-host.bat test` runs them;
-`ctest --test-dir build-host -V` prints the per-binary `N tests from ... ran` lines that add up to 73.
+The host suite needs no CUDA toolkit and no GPU: 124 GoogleTest cases in 6 ctest entries (`config` 3,
+`graph` 7, `json` 28, `analysis` 30, `rules` 51, `demo_check` 5). `build-host.bat test` runs them;
+`ctest --test-dir build-host -V` prints the per-binary `N tests from ... ran` lines that add up to 124.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -129,7 +131,8 @@ graph-lint/
 │   ├── config.hpp
 │   ├── cuda_source.hpp
 │   ├── graph.hpp
-│   └── json.hpp
+│   ├── json.hpp
+│   └── rules.hpp
 ├── src/
 │   └── cuda_source.cpp
 ├── tests/
@@ -152,7 +155,8 @@ graph-lint/
 │   ├── test_graph.cpp
 │   ├── test_json.cpp
 │   ├── test_main.cpp
-│   └── test_main_device.cpp
+│   ├── test_main_device.cpp
+│   └── test_rules.cpp
 ├── graphs/
 │   ├── built.json
 │   ├── captured.json
@@ -161,7 +165,8 @@ graph-lint/
 │   └── REPORT.md
 ├── docs/
 │   ├── CONVENTIONS.md
-│   └── limits.md
+│   ├── limits.md
+│   └── rules.md
 ├── experiments/
 │   ├── m0_graph/
 │   │   ├── REPORT.md

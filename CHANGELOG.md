@@ -20,6 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/device/demo_graph.cu`: four shapes read from real handles and written to `graphs/`.
 - `topology`: levels, depth, width per level and the transitive reduction, with the reduction
   checked against an independent naive reference on small graphs. Pure host code.
+- `lint`: the seven rules of `docs/rules.md`, each with the reason it did not apply. Findings are
+  ordered by severity, node list, rule and message, so a report is a function of the graph. The
+  kernel-name rule stays `not_applicable` while the reader cannot resolve a name.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.
