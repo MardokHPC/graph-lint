@@ -4,17 +4,20 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M6 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
-v1), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters, the
-report, the CI gate and the two command-line tools, the demo that produced the four artifacts in
-`graphs/`, and CI. The benchmark and the worked example are not here.
+M0 to M6 of nine milestones are closed, and the weights half of M7 is in: a `ns` table applies to the
+model, the critical path becomes the heaviest path, and the gate compares `path_ns`. The tree holds
+the graph model, the JSON contract (schema v2 for reports), the `cudaGraph_t` reader, the topology
+analysis, the rules, the DOT and Mermaid emitters, the report, the CI gate and the two command-line
+tools, the demo that produced the four artifacts in `graphs/`, and CI. The benchmark and the worked
+example are not here.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
-`dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction and the
-minimal DAG with `topology`, turn all of it into findings with `lint`, render the graph as DOT or
-Mermaid with `to_dot` and `to_mermaid`, and from a shell produce a report with `graphlint_report`
-and compare two reports with `graphlint_gate`, which exits 0, 1 or 2.
+`dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction, the
+minimal DAG and the critical path with `topology` and `critical_path`, turn all of it into findings
+with `lint`, render the graph as DOT or Mermaid with `to_dot` and `to_mermaid`, apply a measured
+weights table with `apply_weights`, and from a shell produce a report with `graphlint_report` and
+compare two reports with `graphlint_gate`, which exits 0, 1 or 2.
 
 ## What it is
 
@@ -101,13 +104,13 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 183 GoogleTest cases in nine binaries (`config` 3,
-`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 16, `gate` 19, `demo_check`
-5). ctest runs 25 entries: those nine, `artifacts_locale`, and fifteen process-level entries that run
-the two tools and assert exit codes, stderr and byte equality. `ctest --test-dir build-host -V`
-prints the per-binary counts. `artifacts_locale` is not a GoogleTest binary: it reruns
-`emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares
-the eight files with `graphs/` byte for byte.
+The host suite needs no CUDA toolkit and no GPU: 212 GoogleTest cases in ten binaries (`config` 3,
+`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 16, `gate` 27, `weights` 21,
+`demo_check` 5). ctest runs 35 entries: those ten, `artifacts_locale`, `report_ns_determinism`, and
+twenty-three process-level entries that run the two tools and assert exit codes, stderr and byte
+equality. `ctest --test-dir build-host -V` prints the per-binary counts. `artifacts_locale` is not a
+GoogleTest binary: it reruns `emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and
+`TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -188,7 +191,8 @@ graph-lint/
 │   ├── graph.hpp
 │   ├── json.hpp
 │   ├── report.hpp
-│   └── rules.hpp
+│   ├── rules.hpp
+│   └── weights.hpp
 ├── src/
 │   └── cuda_source.cpp
 ├── tests/
@@ -209,11 +213,15 @@ graph-lint/
 │   │   ├── ns_weights.json
 │   │   ├── other_source.json
 │   │   └── truncated.json
+│   ├── data/weights/
+│   │   ├── diamond.json
+│   │   └── unit_us.json
 │   ├── device/
 │   │   ├── demo_check.cpp
 │   │   ├── demo_graph.cu
 │   │   └── test_cuda_source.cu
 │   ├── tools/
+│   │   ├── report_determinism.cmake
 │   │   ├── report_out.cmake
 │   │   └── run_expect.cmake
 │   ├── test_analysis.cpp
@@ -225,7 +233,8 @@ graph-lint/
 │   ├── test_main.cpp
 │   ├── test_main_device.cpp
 │   ├── test_report.cpp
-│   └── test_rules.cpp
+│   ├── test_rules.cpp
+│   └── test_weights.cpp
 ├── tools/
 │   ├── emit_artifacts.cpp
 │   ├── gate.cpp
@@ -250,7 +259,8 @@ graph-lint/
 │   ├── emitters.md
 │   ├── limits.md
 │   ├── report.md
-│   └── rules.md
+│   ├── rules.md
+│   └── weights.md
 ├── experiments/
 │   ├── m0_graph/
 │   │   ├── REPORT.md

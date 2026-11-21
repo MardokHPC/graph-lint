@@ -31,11 +31,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tools/emit_artifacts.cpp`, built with the tests and run by `build-host.bat artifacts`: it rewrites
   `graphs/{built,captured,pingpong,chain}.{dot,mmd}` from the four committed JSON, and the suite and
   the README figure are compared with those files byte for byte.
-- `report.json`, schema v1 (`docs/report.md`): the graph, the analysis, the findings, the
+- `report.json`, schema v2 (`docs/report.md`): the graph, the analysis, the findings, the
   applicability list and the environment, written by `graphlint_report`. `graphlint_gate` reads it
   back, recomputes the analysis from the embedded graph and exits 0, 1 or 2: pass, regression,
   suspect. Thresholds on depth, implied edges and severe findings are absolute integers; the gate
   never trusts a declared analysis block to decide.
+- Measured weights (`docs/weights.md`): a complete `ns` table per node, applied by
+  `graphlint_report --weights`, bound to one graph by node count and a structural fingerprint that
+  survives relabelling. `path` and `path_ns` appear in a report schema 2 only when the weights are
+  nanoseconds; with uniform weights the weighted path is the hop path. `graphlint_gate` compares
+  `path_ns` under `--max-path-increase-ns` and refuses a threshold whose unit does not match the
+  pair.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.
