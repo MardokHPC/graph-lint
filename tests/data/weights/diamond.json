@@ -1,0 +1,4 @@
+{
+  "graph": "a184e191b8b5ac47", "node_count": 4, "schema_version": 1, "unit": "ns",
+  "weights": [[0, 200], [1, 700], [2, 300], [3, 100]]
+}

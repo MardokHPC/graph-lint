@@ -6,6 +6,7 @@
 #include <graphlint/rules.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,11 +27,14 @@ struct ReportAnalysis {
     int distinct_edges = 0;
     std::vector<std::pair<int, int>> edges_minimal;
     std::vector<std::pair<int, int>> edges_redundant;
+    std::vector<int> path;      // ns reports only
+    std::uint64_t path_ns = 0;  // ns reports only
+    bool has_path = false;      // the document carried the two keys above
     std::vector<int> width;
 };
 
 struct ReportDocument {
-    int schema_version = 1;
+    int schema_version = 2;
     Graph graph;
     Environment environment;
     std::vector<Finding> findings;  // declared, in the document's order
@@ -142,6 +146,17 @@ inline void append_findings(std::string& out, const std::vector<Finding>& findin
     detail::append_pair_list(out, topo.edges_minimal, 6, 4);
     out += ",\n    \"edges_redundant\": ";
     detail::append_pair_list(out, topo.edges_redundant, 6, 4);
+    if (graph.weight_kind == WeightKind::Nanoseconds) {
+        // A refused topology yields an empty path, like the zeroed depth above: the gate
+        // recomputes and turns the disagreement into a note.
+        CriticalPath path;
+        GraphError path_error;
+        static_cast<void>(critical_path(graph, topo, path, path_error));
+        out += ",\n    \"path\": ";
+        detail::append_int_list(out, path.nodes);
+        out += ",\n    \"path_ns\": ";
+        detail::append_uint(out, path.weight_sum);
+    }
     out += ",\n    \"width\": ";
     detail::append_int_list(out, topo.width);
     out += "\n  },\n";
@@ -166,7 +181,7 @@ inline void append_findings(std::string& out, const std::vector<Finding>& findin
     out += "  \"graph\": ";
     detail::dump_graph_into(out, graph, 1, true);
     out += ",\n";
-    out += "  \"schema_version\": 1\n";
+    out += "  \"schema_version\": 2\n";
     out += "}\n";
     return out;
 }
@@ -241,7 +256,7 @@ public:
                 if (!parse_int(version)) {
                     return false;
                 }
-                if (version != 1) {
+                if (version != 2) {
                     return fail(GraphErrorKind::SchemaVersion, value_pos,
                                 "unsupported schema_version");
                 }
@@ -272,6 +287,16 @@ public:
         if (!has_schema_version) {
             return fail(GraphErrorKind::MissingKey, object_pos, "missing key \"schema_version\"");
         }
+        // The path keys are the ns report's: a levels document with them would be a document
+        // the writer cannot produce, and the gate would compare a number nobody measured.
+        if (document.graph.weight_kind == WeightKind::Nanoseconds && !document.analysis.has_path) {
+            return fail(GraphErrorKind::WeightRule, object_pos,
+                        "analysis of an ns report requires \"path\" and \"path_ns\"");
+        }
+        if (document.graph.weight_kind != WeightKind::Nanoseconds && document.analysis.has_path) {
+            return fail(GraphErrorKind::WeightRule, object_pos,
+                        "analysis of a levels report carries no \"path\"");
+        }
 
         skip_whitespace();
         if (!at_end()) {
@@ -288,6 +313,8 @@ private:
         bool has_distinct_edges = false;
         bool has_edges_minimal = false;
         bool has_edges_redundant = false;
+        bool has_path = false;
+        bool has_path_ns = false;
         bool has_width = false;
         const bool parsed = parse_object([&](const std::string& key, std::size_t key_pos) {
             if (key == "depth") {
@@ -305,6 +332,14 @@ private:
             if (key == "edges_redundant") {
                 has_edges_redundant = true;
                 return parse_pairs(analysis.edges_redundant);
+            }
+            if (key == "path") {
+                has_path = true;
+                return parse_int_list(analysis.path);
+            }
+            if (key == "path_ns") {
+                has_path_ns = true;
+                return parse_uint64(analysis.path_ns);
             }
             if (key == "width") {
                 has_width = true;
@@ -327,9 +362,14 @@ private:
         if (!has_edges_redundant) {
             return fail(GraphErrorKind::MissingKey, object_pos, "missing key \"edges_redundant\"");
         }
+        if (has_path != has_path_ns) {
+            return fail(GraphErrorKind::MissingKey, object_pos,
+                        has_path ? "missing key \"path_ns\"" : "missing key \"path\"");
+        }
         if (!has_width) {
             return fail(GraphErrorKind::MissingKey, object_pos, "missing key \"width\"");
         }
+        analysis.has_path = has_path;
         return true;
     }
 

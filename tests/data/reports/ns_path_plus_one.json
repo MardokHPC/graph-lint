@@ -1,0 +1,52 @@
+{
+  "analysis": {
+    "depth": 3,
+    "distinct_edges": 4,
+    "edges_minimal": [
+      [0, 1],
+      [0, 2],
+      [1, 3],
+      [2, 3]
+    ],
+    "edges_redundant": [],
+    "path": [0, 1, 3],
+    "path_ns": 1001,
+    "width": [1, 2, 1]
+  },
+  "applicability": {
+    "applicable": [
+      {"reason": "graph is a DAG", "rule": "dag-check"},
+      {"reason": "depth and node count are known", "rule": "launch-shaped"},
+      {"reason": "the reduction is exact on a DAG", "rule": "redundant-edge"},
+      {"reason": "node types are readable", "rule": "sync-node"},
+      {"reason": "successors and reachability are readable", "rule": "pointless-fork"}
+    ],
+    "not_applicable": [
+      {"reason": "no kernel name", "rule": "duplicate-launch"},
+      {"reason": "no mem_alloc/mem_free node", "rule": "mem-lifecycle"}
+    ]
+  },
+  "environment": {"cuda_runtime": 0, "device": ""},
+  "findings": [
+    {"message": "node 0 splits into 2 single-node branches that rejoin at node 3: the fork buys nothing", "nodes": [0, 3], "rule": "pointless-fork", "severity": "info"}
+  ],
+  "graph": {
+    "children": [],
+    "edges": [
+      [0, 1],
+      [0, 2],
+      [1, 3],
+      [2, 3]
+    ],
+    "nodes": [
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel", "weight": 200},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel", "weight": 700},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 2, "type": "kernel", "weight": 300},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 3, "type": "kernel", "weight": 101}
+    ],
+    "schema_version": 1,
+    "source": {"kind": "built"},
+    "weight_kind": "ns"
+  },
+  "schema_version": 2
+}

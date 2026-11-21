@@ -269,11 +269,19 @@ if(GRAPHLINT_BUILD_TESTS)
     target_include_directories(graphlint_test_report PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
     graphlint_add_test(graphlint_test_gate tests/test_gate.cpp)
-    # The four verdicts, the eight metrics and the threshold boundaries, on documents built in memory.
+    # The four verdicts, the nine metrics and the threshold boundaries, on documents built in memory.
     target_compile_definitions(graphlint_test_gate PRIVATE
         GRAPHLINT_ENABLE_ASSERTS=1
         GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports")
     set(graphlint_report_dir "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports")
+
+    graphlint_add_test(graphlint_test_weights tests/test_weights.cpp)
+    # The table's loader, the fingerprint and the critical path on the six graph fixtures,
+    # plus the committed ns table the CLI cases read.
+    target_compile_definitions(graphlint_test_weights PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs"
+        GRAPHLINT_WEIGHTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/weights")
 
     # Exit codes are the contract of docs/report.md section 4, so the assertions are numbers
     # and the stderr line that names the failed comparison, never stdout alone.
@@ -300,7 +308,27 @@ if(GRAPHLINT_BUILD_TESTS)
         "different source kind: built vs capture")
     graphlint_add_gate_case(gate_weights_incompatible 2
         "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/ns_weights.json"
-        "weight_kind ns")
+        "different weight_kind: levels vs ns")
+    # docs/weights.md section 5: each threshold in the wrong unit is exit 2, and the sentence
+    # names the unit; the pair in ns decides on path_ns only when asked.
+    graphlint_add_gate_case(gate_ns_threshold_on_levels 2
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/baseline.json;--max-path-increase-ns;0"
+        "max-path-increase-ns is a nanosecond threshold")
+    graphlint_add_gate_case(gate_depth_threshold_on_ns 2
+        "--baseline;${graphlint_report_dir}/ns_baseline.json;--current;${graphlint_report_dir}/ns_baseline.json;--max-depth-increase;0"
+        "max-depth-increase is a level count")
+    graphlint_add_gate_case(gate_ns_regression 1
+        "--baseline;${graphlint_report_dir}/ns_baseline.json;--current;${graphlint_report_dir}/ns_path_plus_one.json;--max-path-increase-ns;0"
+        "path_ns grew 1 > 0")
+    graphlint_add_gate_case(gate_ns_without_threshold 0
+        "--baseline;${graphlint_report_dir}/ns_baseline.json;--current;${graphlint_report_dir}/ns_path_plus_one.json"
+        "all metrics inside their thresholds")
+    graphlint_add_gate_case(gate_ns_within_threshold 0
+        "--baseline;${graphlint_report_dir}/ns_baseline.json;--current;${graphlint_report_dir}/ns_path_plus_one.json;--max-path-increase-ns;1"
+        "all metrics inside their thresholds")
+    graphlint_add_gate_case(gate_ns_improvement 0
+        "--baseline;${graphlint_report_dir}/ns_path_plus_one.json;--current;${graphlint_report_dir}/ns_baseline.json;--max-path-increase-ns;0"
+        "path_ns fell 1 > 0")
     # A document is emitted even when the input cannot be read, so the --json file is opened,
     # not assumed.
     function(graphlint_add_gate_json_case name expected args stderr json_path json_contains)
@@ -364,6 +392,27 @@ if(GRAPHLINT_BUILD_TESTS)
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports/baseline.json"
         "-DEXPECT_STDERR=unknown key \"analysis\""
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    # --weights: a table bound to the graph turns the summary into a nanosecond path, and a
+    # refused table is exit 2 with the position of the fault.
+    add_test(NAME report_weights_summary COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=0
+        "-DARGS=--format;summary;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs/diamond.json;--weights;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/weights/diamond.json"
+        "-DEXPECT_STDERR=^$"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+    add_test(NAME report_weights_refused COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=--format;summary;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs/diamond.json;--weights;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/weights/unit_us.json"
+        "-DEXPECT_STDERR=unit .us. is not"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+    # Two processes, one under another locale and timezone, must write the same bytes.
+    add_test(NAME report_ns_determinism COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs/diamond.json;--weights;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/weights/diamond.json;--format;json"
+        "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/ns-determinism"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/report_determinism.cmake)
 
     # --out leaves stdout empty and writes the same bytes; the emitters also reproduce the
     # committed graphs/*.dot and *.mmd, so the CLI stays tied to the files the README shows.

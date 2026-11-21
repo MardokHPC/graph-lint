@@ -44,5 +44,5 @@
     "source": {"kind": "built"},
     "weight_kind": "levels"
   },
-  "schema_version": 1
+  "schema_version": 2
 }

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -179,6 +180,68 @@ struct Topology {
     out.edges_redundant = std::move(redundant);
     out.distinct_edges = static_cast<int>(edges.size());
     out.acyclic = true;
+    return true;
+}
+
+// The longest weighted chain, in ids: `weight_sum` is in ns only when weight_kind says so.
+struct CriticalPath {
+    std::vector<int> nodes;
+    std::uint64_t weight_sum = 0;
+};
+
+// dist(n) = weight(n) + max(dist(p)) over p -> n; the tie-break is total (smallest end, then
+// smallest predecessor), so two runs on one graph never disagree. Topology is the permission
+// slip: its `from < to` edges make the ascending id order a topological one.
+[[nodiscard]] inline bool critical_path(const Graph& graph, const Topology& topo,
+                                        CriticalPath& out, GraphError& error) {
+    error = GraphError{};
+    out = CriticalPath{};
+    const std::size_t n = graph.nodes.size();
+    if (!topo.acyclic || topo.level.size() != n) {
+        return detail::fail(error, GraphErrorKind::Cycle, "critical_path needs an analysed DAG");
+    }
+    if (n == 0) {
+        return true;
+    }
+
+    std::vector<std::pair<int, int>> edges = graph.edges;
+    std::sort(edges.begin(), edges.end());
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    std::vector<std::vector<int>> predecessors(n);
+    for (const std::pair<int, int>& edge : edges) {
+        predecessors[static_cast<std::size_t>(edge.second)].push_back(edge.first);
+    }
+
+    std::vector<std::uint64_t> dist(n, 0);
+    std::vector<int> best_predecessor(n, -1);
+    for (std::size_t i = 0; i < n; ++i) {
+        std::uint64_t best = 0;
+        int best_pred = -1;
+        // Ascending, and the comparison is strict: the first maximum is the smallest id. The
+        // `best_pred < 0` arm is what admits a predecessor whose dist is 0 — a legal weight.
+        for (const int p : predecessors[i]) {
+            const std::uint64_t candidate = dist[static_cast<std::size_t>(p)];
+            if (best_pred < 0 || candidate > best) {
+                best = candidate;
+                best_pred = p;
+            }
+        }
+        dist[i] = graph.nodes[i].weight + best;
+        best_predecessor[i] = best_pred;
+    }
+
+    std::size_t end = 0;
+    for (std::size_t i = 1; i < n; ++i) {
+        if (dist[i] > dist[end]) {
+            end = i;
+        }
+    }
+    out.weight_sum = dist[end];
+    for (int at = static_cast<int>(end); at >= 0;) {
+        out.nodes.push_back(at);
+        at = best_predecessor[static_cast<std::size_t>(at)];
+    }
+    std::reverse(out.nodes.begin(), out.nodes.end());
     return true;
 }
 

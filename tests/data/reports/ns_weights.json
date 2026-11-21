@@ -8,6 +8,8 @@
       [2, 3]
     ],
     "edges_redundant": [],
+    "path": [0, 1, 2, 3],
+    "path_ns": 900,
     "width": [1, 1, 1, 1]
   },
   "applicability": {
@@ -33,14 +35,14 @@
       [2, 3]
     ],
     "nodes": [
-      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel", "weight": 100},
-      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel", "weight": 100},
-      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 2, "type": "kernel", "weight": 100},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel", "weight": 500},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel", "weight": 0},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 2, "type": "kernel", "weight": 300},
       {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 3, "type": "kernel", "weight": 100}
     ],
     "schema_version": 1,
     "source": {"kind": "built"},
     "weight_kind": "ns"
   },
-  "schema_version": 1
+  "schema_version": 2
 }

@@ -5,6 +5,7 @@
 #include <graphlint/json.hpp>
 #include <graphlint/report.hpp>
 #include <graphlint/rules.hpp>
+#include <graphlint/weights.hpp>
 
 #include <tools/report_core.hpp>
 
@@ -44,8 +45,8 @@ void enable_binary_stdout() {
 
 int usage(const char* program) {
     std::fprintf(stderr,
-                 "usage: %s <graph.json> [--format summary|json|dot|mermaid] [--out <path>] "
-                 "[--detail-params] [--max-nodes N]\n",
+                 "usage: %s <graph.json> [--format summary|json|dot|mermaid] [--weights <path>] "
+                 "[--out <path>] [--detail-params] [--max-nodes N]\n",
                  program);
     return 2;
 }
@@ -119,6 +120,7 @@ int main(int argc, char** argv) {
 
     std::string path;
     std::string out_path;
+    std::string weights_path;
     ReportOptions options;
 
     for (int i = 1; i < argc; ++i) {
@@ -127,6 +129,8 @@ int main(int argc, char** argv) {
             if (!format_from_token(argv[++i], options.format)) {
                 return usage(argv[0]);
             }
+        } else if (argument == "--weights" && i + 1 < argc) {
+            weights_path = argv[++i];
         } else if (argument == "--out" && i + 1 < argc) {
             out_path = argv[++i];
         } else if (argument == "--detail-params") {
@@ -167,6 +171,25 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "%s:%d:%d: %s\n", path.c_str(), error.line, error.column,
                      error.detail.c_str());
         return 2;
+    }
+
+    // The table names the graph it measured: a refused one is a position in the table, or a
+    // binding that does not hold, never a silent 1 on a number that lands in a report.
+    if (!weights_path.empty()) {
+        std::ifstream weights_in(weights_path, std::ios::binary);
+        if (!weights_in) {
+            std::fprintf(stderr, "%s:0:0: cannot read the file\n", weights_path.c_str());
+            return 2;
+        }
+        std::ostringstream weights_buffer;
+        weights_buffer << weights_in.rdbuf();
+        WeightsTable table;
+        if (!parse_weights(weights_buffer.str(), table, error) ||
+            !apply_weights(graph, table, error)) {
+            std::fprintf(stderr, "%s:%d:%d: %s\n", weights_path.c_str(), error.line, error.column,
+                         error.detail.c_str());
+            return 2;
+        }
     }
 
     options.source = path;

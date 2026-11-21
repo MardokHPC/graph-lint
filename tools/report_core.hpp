@@ -12,6 +12,7 @@
 #include <graphlint/rules.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -46,6 +47,19 @@ inline void append_ids(std::string& out, const std::vector<int>& ids) {
     }
 }
 
+// Integer division only: a float would let the platform decide the text of a report.
+[[nodiscard]] inline std::string milliseconds(std::uint64_t ns) {
+    std::string out;
+    graphlint::detail::append_uint(out, ns / 1000000ull);
+    out += '.';
+    const std::uint64_t thousandths = (ns % 1000000ull) / 1000ull;
+    out += static_cast<char>('0' + (thousandths / 100ull) % 10ull);
+    out += static_cast<char>('0' + (thousandths / 10ull) % 10ull);
+    out += static_cast<char>('0' + thousandths % 10ull);
+    out += " ms";
+    return out;
+}
+
 [[nodiscard]] inline std::string summary_document(const Graph& graph, const Topology& topo,
                                                   const LintResult& lint_result) {
     std::string out;
@@ -65,7 +79,35 @@ inline void append_ids(std::string& out, const std::vector<int>& ids) {
     graphlint::detail::append_int(out, max_width(topo));
     out += "\nminimal_dag: ";
     graphlint::detail::append_int(out, static_cast<int>(topo.edges_minimal.size()));
-    out += " edges\nfindings: ";
+    out += " edges";
+    CriticalPath path;
+    GraphError path_error;
+    if (topo.acyclic && critical_path(graph, topo, path, path_error)) {
+        // Space, not comma: the line is the path, and docs/weights.md section 6 pins it.
+        std::string ids;
+        for (const int id : path.nodes) {
+            if (!ids.empty()) {
+                ids += ' ';
+            }
+            graphlint::detail::append_int(ids, id);
+        }
+        out += "\ncritical_path: ";
+        if (!ids.empty()) {
+            out += ids;
+            out += ' ';
+        }
+        out += '(';
+        if (graph.weight_kind == WeightKind::Nanoseconds) {
+            graphlint::detail::append_uint(out, path.weight_sum);
+            out += " ns, ";
+            out += milliseconds(path.weight_sum);
+        } else {
+            graphlint::detail::append_int(out, static_cast<int>(path.nodes.size()));
+            out += " hops";
+        }
+        out += ')';
+    }
+    out += "\nfindings: ";
     graphlint::detail::append_int(out, static_cast<int>(lint_result.findings.size()));
     out += '\n';
     for (const Finding& finding : lint_result.findings) {

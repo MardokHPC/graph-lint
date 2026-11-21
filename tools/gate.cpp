@@ -40,7 +40,7 @@ int usage(const char* program) {
     std::fprintf(stderr,
                  "usage: %s --baseline <a.json> --current <b.json> [--json <path>] "
                  "[--max-depth-increase N] [--max-redundant-increase N] "
-                 "[--max-severe-increase N] [--quiet]\n",
+                 "[--max-severe-increase N] [--max-path-increase-ns N] [--quiet]\n",
                  program);
     return 2;
 }
@@ -118,12 +118,17 @@ int main(int argc, char** argv) {
             if (!parse_int(argv[++i], thresholds.max_depth_increase)) {
                 return usage(argv[0]);
             }
+            thresholds.depth_given = true;
         } else if (argument == "--max-redundant-increase" && i + 1 < argc) {
             if (!parse_int(argv[++i], thresholds.max_redundant_increase)) {
                 return usage(argv[0]);
             }
         } else if (argument == "--max-severe-increase" && i + 1 < argc) {
             if (!parse_int(argv[++i], thresholds.max_severe_increase)) {
+                return usage(argv[0]);
+            }
+        } else if (argument == "--max-path-increase-ns" && i + 1 < argc) {
+            if (!parse_int(argv[++i], thresholds.max_path_increase_ns)) {
                 return usage(argv[0]);
             }
         } else {
@@ -139,6 +144,13 @@ int main(int argc, char** argv) {
         thresholds.max_severe_increase < 0) {
         std::fprintf(stderr,
                      "graphlint_gate: thresholds are absolute increases and cannot be negative\n");
+        return 2;
+    }
+    // -1 is the contract's "not asked"; below it there is no meaning to give the number.
+    if (thresholds.max_path_increase_ns < -1) {
+        std::fprintf(stderr,
+                     "graphlint_gate: --max-path-increase-ns is an absolute increase: -1 is "
+                     "\"not asked\", below it is a usage error\n");
         return 2;
     }
 

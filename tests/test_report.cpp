@@ -3,6 +3,7 @@
 #include <graphlint/json.hpp>
 #include <graphlint/report.hpp>
 #include <graphlint/rules.hpp>
+#include <graphlint/weights.hpp>
 
 #include <tools/report_core.hpp>
 
@@ -37,6 +38,7 @@ using graphlint::tools::ReportOptions;
 using graphlint::tools::run_report;
 
 constexpr const char* k_graph_dir = GRAPHLINT_GRAPH_DIR;
+constexpr const char* k_data_dir = GRAPHLINT_TEST_DATA_DIR;
 
 std::string slurp(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
@@ -110,7 +112,7 @@ const char* const k_pinned_report =
     "    \"source\": {\"kind\": \"built\"},\n"
     "    \"weight_kind\": \"levels\"\n"
     "  },\n"
-    "  \"schema_version\": 1\n"
+    "  \"schema_version\": 2\n"
     "}\n";
 
 std::string rendered(const Graph& graph) {
@@ -185,13 +187,14 @@ TEST(Report, ParserRoundTripsTheWriter) {
         << error.line << ":" << error.column << " " << error.detail;
     EXPECT_FALSE(error);
     EXPECT_EQ(document.graph, graph);
-    EXPECT_EQ(document.schema_version, 1);
+    EXPECT_EQ(document.schema_version, 2);
     EXPECT_EQ(document.environment.device, "");
     EXPECT_EQ(document.environment.cuda_runtime, 0);
     EXPECT_EQ(document.analysis.depth, 2);
     EXPECT_EQ(document.analysis.distinct_edges, 1);
     EXPECT_EQ(document.analysis.edges_minimal, (std::vector<std::pair<int, int>>{{0, 1}}));
     EXPECT_TRUE(document.analysis.edges_redundant.empty());
+    EXPECT_FALSE(document.analysis.has_path);
     EXPECT_EQ(document.analysis.width, (std::vector<int>{1, 1}));
     ASSERT_EQ(document.findings.size(), 1u);
     EXPECT_EQ(document.findings[0].rule, graphlint::RuleId::SyncNode);
@@ -214,11 +217,11 @@ TEST(Report, ParserRejectsAnUnknownKey) {
     EXPECT_EQ(error.detail, "unknown key \"bogus\"");
 }
 
-TEST(Report, ParserRejectsSchemaVersionTwo) {
+TEST(Report, ParserRejectsSchemaVersionOne) {
     std::string text = k_pinned_report;
-    const std::size_t at = text.rfind("  \"schema_version\": 1");
+    const std::size_t at = text.rfind("  \"schema_version\": 2");
     ASSERT_NE(at, std::string::npos);
-    text.replace(at, std::string("  \"schema_version\": 1").size(), "  \"schema_version\": 2");
+    text.replace(at, std::string("  \"schema_version\": 2").size(), "  \"schema_version\": 1");
 
     ReportDocument document;
     GraphError error;
@@ -265,7 +268,7 @@ TEST(Report, ParserMapsTheNestedColumnOfASingleLineGraph) {
     // The graph object must start after column 1, or the `- 1` of the mapping is invisible.
     std::string text = k_pinned_report;
     const std::size_t start = text.find("  \"graph\": {");
-    const std::size_t end = text.find("\n  \"schema_version\": 1");
+    const std::size_t end = text.find("\n  \"schema_version\": 2");
     ASSERT_NE(start, std::string::npos);
     ASSERT_NE(end, std::string::npos);
     text.replace(start, end - start, "  \"graph\": {\"bad\": 1},");
@@ -310,6 +313,116 @@ TEST(Report, WidthHasOneEntryPerLevel) {
     EXPECT_GT(document.analysis.depth, 1);
     EXPECT_EQ(document.analysis.width.size(),
               static_cast<std::size_t>(document.analysis.depth));
+}
+
+// ---------------------------------------------------------------------------
+// Schema 2: the path exists only in a ns report, between edges_redundant and width.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The diamond of docs/weights.md section 3, in ns: 0 -> {1, 2} -> 3, 200/700/300/100.
+Graph weighted_diamond() {
+    Graph graph;
+    graph.nodes = {kernel_node(0), kernel_node(1), kernel_node(2), kernel_node(3)};
+    graph.edges = {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    graphlint::WeightsTable table;
+    table.ns = {200, 700, 300, 100};
+    table.fingerprint = graphlint::graph_fingerprint(graph);
+    GraphError error;
+    EXPECT_TRUE(graphlint::apply_weights(graph, table, error)) << error.detail;
+    return graph;
+}
+
+}  // namespace
+
+TEST(Report, NsCarriesThePathBetweenEdgesRedundantAndWidth) {
+    const std::string text = rendered(weighted_diamond());
+    const std::string block =
+        "    \"edges_redundant\": [],\n"
+        "    \"path\": [0, 1, 3],\n"
+        "    \"path_ns\": 1000,\n"
+        "    \"width\": [1, 2, 1]\n";
+    EXPECT_NE(text.find(block), std::string::npos) << text;
+
+    ReportDocument document;
+    GraphError error;
+    ASSERT_TRUE(parse_report(text, document, error))
+        << error.line << ":" << error.column << " " << error.detail;
+    EXPECT_TRUE(document.analysis.has_path);
+    EXPECT_EQ(document.analysis.path, (std::vector<int>{0, 1, 3}));
+    EXPECT_EQ(document.analysis.path_ns, 1000u);
+
+    // dump -> parse -> dump is byte-identical, path included.
+    EXPECT_EQ(rendered(document.graph), text);
+}
+
+TEST(Report, LevelsReportCarriesNoPath) {
+    const std::string text = rendered(built_two_node());
+    EXPECT_EQ(text.find("\"path"), std::string::npos);
+    EXPECT_EQ(text.find("\"path_ns\""), std::string::npos);
+}
+
+TEST(Report, ParserRejectsALevelsDocumentWithAPath) {
+    std::string text = k_pinned_report;
+    const std::size_t at = text.find("    \"width\": [1, 1]");
+    ASSERT_NE(at, std::string::npos);
+    text.insert(at, "    \"path\": [0, 1],\n    \"path_ns\": 2,\n");
+
+    ReportDocument document;
+    GraphError error;
+    EXPECT_FALSE(parse_report(text, document, error));
+    EXPECT_EQ(error.kind, GraphErrorKind::WeightRule);
+    EXPECT_NE(error.detail.find("levels report"), std::string::npos) << error.detail;
+}
+
+TEST(Report, ParserRejectsAnNsDocumentWithoutAPath) {
+    const std::string full = slurp(std::string(k_data_dir) + "/ns_baseline.json");
+    ASSERT_FALSE(full.empty());
+    const std::string path_lines = "    \"path\": [0, 1, 3],\n    \"path_ns\": 1000,\n";
+    ASSERT_NE(full.find(path_lines), std::string::npos);
+    std::string text = full;
+    text.erase(text.find(path_lines), path_lines.size());
+
+    // Dropping only path_ns is the other half: one key without the other is a missing key.
+    ReportDocument document;
+    GraphError error;
+    EXPECT_FALSE(parse_report(text, document, error));
+    EXPECT_EQ(error.kind, GraphErrorKind::WeightRule);
+
+    std::string half = full;
+    const std::string path_ns_line = "    \"path_ns\": 1000,\n";
+    half.erase(half.find(path_ns_line), path_ns_line.size());
+    EXPECT_FALSE(parse_report(half, document, error));
+    EXPECT_EQ(error.kind, GraphErrorKind::MissingKey);
+    EXPECT_NE(error.detail.find("path_ns"), std::string::npos) << error.detail;
+}
+
+TEST(ReportCli, SummaryPrintsTheCriticalPathInBothUnits) {
+    {
+        ReportOptions options;
+        std::ostringstream out;
+        std::ostringstream err;
+        EXPECT_EQ(run_report(built_two_node(), options, out, err), 0);
+        EXPECT_NE(out.str().find("\ncritical_path: 0 1 (2 hops)\n"), std::string::npos)
+            << out.str();
+    }
+    {
+        ReportOptions options;
+        std::ostringstream out;
+        std::ostringstream err;
+        EXPECT_EQ(run_report(weighted_diamond(), options, out, err), 0);
+        EXPECT_NE(out.str().find("\ncritical_path: 0 1 3 (1000 ns, 0.001 ms)\n"),
+                  std::string::npos)
+            << out.str();
+    }
+}
+
+TEST(ReportCli, MillisecondsTruncateWithIntegerDivision) {
+    EXPECT_EQ(graphlint::tools::milliseconds(1000), "0.001 ms");
+    EXPECT_EQ(graphlint::tools::milliseconds(4200000), "4.200 ms");
+    EXPECT_EQ(graphlint::tools::milliseconds(0), "0.000 ms");
+    EXPECT_EQ(graphlint::tools::milliseconds(999999999999ull), "999999.999 ms");
 }
 
 // ---------------------------------------------------------------------------

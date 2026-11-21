@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -97,7 +98,25 @@ ReportDocument document_of(const Graph& graph, const Environment& environment = 
     document.analysis.edges_minimal = topo.edges_minimal;
     document.analysis.edges_redundant = topo.edges_redundant;
     document.analysis.width = topo.width;
+    if (graph.weight_kind == WeightKind::Nanoseconds) {
+        graphlint::CriticalPath path;
+        GraphError path_error;
+        EXPECT_TRUE(graphlint::critical_path(graph, topo, path, path_error)) << path_error.detail;
+        document.analysis.path = path.nodes;
+        document.analysis.path_ns = path.weight_sum;
+        document.analysis.has_path = true;
+    }
     return document;
+}
+
+// A chain of `count` kernels with one weight per node: the weighted twin of chain().
+Graph weighted_chain(const std::vector<std::uint64_t>& weights) {
+    Graph graph = chain(static_cast<int>(weights.size()));
+    graph.weight_kind = WeightKind::Nanoseconds;
+    for (std::size_t i = 0; i < weights.size(); ++i) {
+        graph.nodes[i].weight = weights[i];
+    }
+    return graph;
 }
 
 // A graph topology refuses can only be caller-built, so parse_report cannot produce it.
@@ -190,14 +209,14 @@ TEST(Gate, OtherSourceIsSuspect) {
     EXPECT_EQ(graphlint::exit_code(result.verdict), 2);
 }
 
-TEST(Gate, NanosecondWeightsAreSuspect) {
+TEST(Gate, MixedWeightKindsAreSuspect) {
     Graph nanoseconds = chain(4);
     nanoseconds.weight_kind = WeightKind::Nanoseconds;
     const GateResult result =
         graphlint::compare(document_of(chain(4)), document_of(nanoseconds), GateThresholds{});
 
     EXPECT_EQ(result.verdict, Verdict::suspect);
-    EXPECT_EQ(result.reason, "weight_kind ns has no threshold before M7");
+    EXPECT_EQ(result.reason, "different weight_kind: levels vs ns");
 }
 
 TEST(Gate, ErrorFindingIsSuspect) {
@@ -377,8 +396,8 @@ TEST(Gate, DumpGateIsDeterministicAndPinned) {
         "  ],\n"
         "  \"reason\": \"all metrics inside their thresholds\",\n"
         "  \"schema_version\": 1,\n"
-        "  \"thresholds\": {\"max_depth_increase\": 0, \"max_redundant_increase\": 0, "
-        "\"max_severe_increase\": 0},\n"
+        "  \"thresholds\": {\"max_depth_increase\": 0, \"max_path_increase_ns\": -1, "
+        "\"max_redundant_increase\": 0, \"max_severe_increase\": 0},\n"
         "  \"verdict\": \"pass\"\n"
         "}\n";
     EXPECT_EQ(graphlint::dump_gate(result, GateThresholds{}), expected);
@@ -421,10 +440,182 @@ TEST(Gate, FixtureCasesMatchTheContract) {
     ASSERT_TRUE(load_report(dir + "/ns_weights.json", ns_weights, error));
     const GateResult weights = graphlint::compare(baseline, ns_weights, GateThresholds{});
     EXPECT_EQ(weights.verdict, Verdict::suspect);
-    EXPECT_EQ(weights.reason, "weight_kind ns has no threshold before M7");
+    EXPECT_EQ(weights.reason, "different weight_kind: levels vs ns");
 
     ReportDocument truncated;
     EXPECT_FALSE(load_report(dir + "/truncated.json", truncated, error));
     EXPECT_GT(error.line, 0);
     EXPECT_GT(error.column, 0);
+}
+
+// ---------------------------------------------------------------------------
+// The matrix of docs/weights.md section 5, on the two committed ns fixtures.
+// ---------------------------------------------------------------------------
+
+TEST(Gate, NsFixturesCompareOnPathNs) {
+    const std::string dir = k_data_dir;
+    ReportDocument baseline;
+    ReportDocument plus_one;
+    GraphError error;
+    ASSERT_TRUE(load_report(dir + "/ns_baseline.json", baseline, error))
+        << error.line << ":" << error.column << " " << error.detail;
+    ASSERT_TRUE(load_report(dir + "/ns_path_plus_one.json", plus_one, error));
+
+    // Declared blocks are the recomputed ones: the same document notes only its own graph.
+    const GateResult same = graphlint::compare(baseline, baseline, GateThresholds{});
+    EXPECT_EQ(same.verdict, Verdict::pass);
+    ASSERT_EQ(same.notes.size(), 1u);
+
+    // The weight table moved the same graph by 1 ns and nothing else moved.
+    EXPECT_EQ(baseline.analysis.path_ns, 1000u);
+    EXPECT_EQ(plus_one.analysis.path_ns, 1001u);
+    EXPECT_EQ(baseline.analysis.path, plus_one.analysis.path);
+    EXPECT_FALSE(graphlint::detail::same_graph_document(baseline.graph, plus_one.graph));
+}
+
+TEST(Gate, NsThresholdDecidesOnlyOnAnNsPair) {
+    const std::string dir = k_data_dir;
+    ReportDocument baseline;
+    ReportDocument plus_one;
+    ReportDocument levels;
+    GraphError error;
+    ASSERT_TRUE(load_report(dir + "/ns_baseline.json", baseline, error));
+    ASSERT_TRUE(load_report(dir + "/ns_path_plus_one.json", plus_one, error));
+    ASSERT_TRUE(load_report(dir + "/baseline.json", levels, error));
+
+    GateThresholds thresholds;
+    thresholds.max_path_increase_ns = 0;
+    const GateResult grew = graphlint::compare(baseline, plus_one, thresholds);
+    EXPECT_EQ(grew.verdict, Verdict::regression);
+    EXPECT_EQ(grew.reason, "path_ns grew 1 > 0");
+    EXPECT_EQ(graphlint::exit_code(grew.verdict), 1);
+
+    thresholds.max_path_increase_ns = 1;
+    EXPECT_EQ(graphlint::compare(baseline, plus_one, thresholds).verdict, Verdict::pass);
+
+    thresholds.max_path_increase_ns = 0;
+    const GateResult fell = graphlint::compare(plus_one, baseline, thresholds);
+    EXPECT_EQ(fell.verdict, Verdict::improvement);
+    EXPECT_EQ(fell.reason, "path_ns fell 1 > 0");
+    EXPECT_EQ(graphlint::exit_code(fell.verdict), 0);
+
+    // ns fixtures on a levels pair: the threshold and the pair are in two units.
+    GateThresholds on_levels;
+    on_levels.max_path_increase_ns = 0;
+    const GateResult refused = graphlint::compare(levels, levels, on_levels);
+    EXPECT_EQ(refused.verdict, Verdict::suspect);
+    EXPECT_NE(refused.reason.find("--max-path-increase-ns is a nanosecond threshold"),
+              std::string::npos)
+        << refused.reason;
+    EXPECT_NE(refused.reason.find("levels vs levels"), std::string::npos) << refused.reason;
+}
+
+TEST(Gate, PathNsWithoutItsThresholdIsContext) {
+    const std::string dir = k_data_dir;
+    ReportDocument baseline;
+    ReportDocument plus_one;
+    GraphError error;
+    ASSERT_TRUE(load_report(dir + "/ns_baseline.json", baseline, error));
+    ASSERT_TRUE(load_report(dir + "/ns_path_plus_one.json", plus_one, error));
+
+    // No default for a measurement: 1 ns of growth is a number, not a verdict.
+    const GateResult result = graphlint::compare(baseline, plus_one, GateThresholds{});
+    EXPECT_EQ(result.verdict, Verdict::pass);
+    ASSERT_EQ(result.metrics.size(), 9u);
+    EXPECT_EQ(result.metrics[3].name, "path_ns");
+    EXPECT_EQ(result.metrics[3].baseline, 1000);
+    EXPECT_EQ(result.metrics[3].current, 1001);
+    EXPECT_EQ(result.metrics[3].delta, 1);
+    EXPECT_EQ(result.metrics[3].status, graphlint::MetricStatus::context);
+    EXPECT_EQ(result.metrics[0].name, "depth");
+    EXPECT_EQ(result.metrics[0].status, graphlint::MetricStatus::context);
+}
+
+TEST(Gate, DepthThresholdOnAnNsPairIsRefused) {
+    const std::string dir = k_data_dir;
+    ReportDocument baseline;
+    GraphError error;
+    ASSERT_TRUE(load_report(dir + "/ns_baseline.json", baseline, error));
+
+    GateThresholds given;
+    given.depth_given = true;
+    const GateResult refused = graphlint::compare(baseline, baseline, given);
+    EXPECT_EQ(refused.verdict, Verdict::suspect);
+    EXPECT_EQ(refused.reason,
+              "--max-depth-increase is a level count and the pair is in ns");
+    EXPECT_EQ(graphlint::exit_code(refused.verdict), 2);
+
+    // The absence of the flag is not a threshold of 0: on ns the depth stays context.
+    const GateResult absent = graphlint::compare(baseline, baseline, GateThresholds{});
+    EXPECT_EQ(absent.verdict, Verdict::pass);
+    EXPECT_EQ(absent.metrics[0].status, graphlint::MetricStatus::context);
+}
+
+TEST(Gate, OtherWeightKindTokensAreStillSuspect) {
+    // ns on both sides but one graph is levels: the mixed pair stays the first problem.
+    Graph nanoseconds = chain(4);
+    nanoseconds.weight_kind = WeightKind::Nanoseconds;
+    const GateResult result = graphlint::compare(document_of(nanoseconds),
+                                                 document_of(chain(4)), GateThresholds{});
+    EXPECT_EQ(result.verdict, Verdict::suspect);
+    EXPECT_EQ(result.reason, "different weight_kind: ns vs levels");
+}
+
+TEST(Gate, EqualPathNsOtherPathIsANote) {
+    // Two diamonds whose weighted sums agree: 0-1-3 and 0-2-3 both total 900.
+    Graph left;
+    left.nodes = {kernel_node(0), kernel_node(1), kernel_node(2), kernel_node(3)};
+    left.edges = {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    left.weight_kind = WeightKind::Nanoseconds;
+    left.nodes[0].weight = 200;
+    left.nodes[1].weight = 500;
+    left.nodes[2].weight = 100;
+    left.nodes[3].weight = 200;
+    Graph right = left;
+    right.nodes[1].weight = 100;
+    right.nodes[2].weight = 500;
+
+    const GateResult result =
+        graphlint::compare(document_of(left), document_of(right), GateThresholds{});
+    EXPECT_EQ(result.verdict, Verdict::pass);
+    EXPECT_TRUE(mentions(result.notes, "path differs while path_ns matches: 0 1 3 vs 0 2 3"))
+        << graphlint::detail::join_problems(result.notes);
+}
+
+TEST(Gate, ATamperedNsDeclaredPathIsANoteOnly) {
+    const std::string dir = k_data_dir;
+    ReportDocument baseline;
+    ReportDocument plus_one;
+    GraphError error;
+    ASSERT_TRUE(load_report(dir + "/ns_baseline.json", baseline, error));
+    ASSERT_TRUE(load_report(dir + "/ns_path_plus_one.json", plus_one, error));
+
+    // A declared 999 on a 1000 ns document: the recomputed sum decides, the block is a note.
+    ReportDocument tampered = baseline;
+    tampered.analysis.path_ns = 999;
+    GateThresholds thresholds;
+    thresholds.max_path_increase_ns = 0;
+    const GateResult within = graphlint::compare(baseline, tampered, thresholds);
+    EXPECT_EQ(within.verdict, Verdict::pass);
+    EXPECT_TRUE(mentions(within.notes, "current: declared analysis disagrees"));
+
+    // The same tamper does not hide a real 1 ns growth: the current graph says 1001.
+    plus_one.analysis.path = {0, 2, 3};
+    const GateResult grew = graphlint::compare(baseline, plus_one, thresholds);
+    EXPECT_EQ(grew.verdict, Verdict::regression);
+    EXPECT_EQ(grew.reason, "path_ns grew 1 > 0");
+    EXPECT_TRUE(mentions(grew.notes, "current: declared analysis disagrees"));
+}
+
+TEST(Gate, DumpGateCarriesPathNsInNs) {
+    const ReportDocument document = document_of(weighted_chain({100, 200, 300}));
+    GateThresholds thresholds;
+    thresholds.max_path_increase_ns = 0;
+    const GateResult result = graphlint::compare(document, document, thresholds);
+    const std::string text = graphlint::dump_gate(result, thresholds);
+    EXPECT_NE(text.find("{\"baseline\": 600, \"current\": 600, \"delta\": 0, \"name\": "
+                        "\"path_ns\", \"status\": \"none\"}"),
+              std::string::npos)
+        << text;
+    EXPECT_NE(text.find("\"max_path_increase_ns\": 0"), std::string::npos) << text;
 }

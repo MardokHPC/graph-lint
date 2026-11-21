@@ -131,14 +131,12 @@ inline void append_mermaid_class(std::string& out, const char* kind,
     std::vector<int> in_degree(n, 0);
     std::vector<int> out_degree(n, 0);
     std::vector<int> only_in(n, -1);
-    std::vector<std::vector<int>> predecessors(n);
     for (const std::pair<int, int>& edge : edges) {
         const std::size_t from = static_cast<std::size_t>(edge.first);
         const std::size_t to = static_cast<std::size_t>(edge.second);
         ++out_degree[from];
         ++in_degree[to];
         only_in[to] = edge.first;
-        predecessors[to].push_back(edge.first);
     }
 
     // Ids are a topological order: a kernel joins the chain of its only predecessor
@@ -166,31 +164,14 @@ inline void append_mermaid_class(std::string& out, const char* kind,
         }
     }
 
-    // The back-walk runs on the uncompressed model; a chain is wholly on it or wholly off.
+    // The path is weighted in ns and a hop count in levels; with weights 1 the two agree
+    // (§3 of docs/weights.md), so the committed artifacts stay byte-identical.
+    CriticalPath path;
+    GraphError path_error;
+    static_cast<void>(critical_path(g, t, path, path_error));
     std::vector<char> on_path(n, 0);
-    if (n != 0) {
-        int current = -1;
-        for (std::size_t index = 0; index < n; ++index) {
-            if (t.level[index] == t.depth - 1) {
-                current = static_cast<int>(index);
-                break;
-            }
-        }
-        while (current >= 0) {
-            const std::size_t at = static_cast<std::size_t>(current);
-            on_path[at] = 1;
-            if (t.level[at] == 0) {
-                break;
-            }
-            int next = -1;
-            for (const int candidate : predecessors[at]) {
-                if (t.level[static_cast<std::size_t>(candidate)] == t.level[at] - 1) {
-                    next = candidate;
-                    break;
-                }
-            }
-            current = next;
-        }
+    for (const int id : path.nodes) {
+        on_path[static_cast<std::size_t>(id)] = 1;
     }
 
     std::vector<char> critical(n, 0);
