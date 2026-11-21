@@ -1,0 +1,21 @@
+{
+  "compiled_runtime": 12060,
+  "cuda_runtime": 12060,
+  "device": "NVIDIA GeForce RTX 2060 SUPER (sm_75)",
+  "driver": 13030,
+  "iterations": 200,
+  "passes": 3,
+  "repeats": 7,
+  "results": [
+    {"depth": 8, "edges": 7, "instantiate_empty_ns": 1000, "instantiate_max_ns": 31100, "instantiate_min_ns": 8800, "instantiate_net_ns": 8900, "instantiate_ns": 9900, "launch_max_ns": 12530, "launch_min_ns": 7679, "launch_net_ns": 7700, "launch_ns": 7986, "nodes": 8, "redundant_edges": 0, "shape": "chain", "zero_point_ns": 286},
+    {"depth": 32, "edges": 31, "instantiate_empty_ns": 900, "instantiate_max_ns": 56700, "instantiate_min_ns": 28800, "instantiate_net_ns": 28400, "instantiate_ns": 29300, "launch_max_ns": 33444, "launch_min_ns": 26283, "launch_net_ns": 26984, "launch_ns": 27269, "nodes": 32, "redundant_edges": 0, "shape": "chain", "zero_point_ns": 285},
+    {"depth": 128, "edges": 127, "instantiate_empty_ns": 1100, "instantiate_max_ns": 185600, "instantiate_min_ns": 114000, "instantiate_net_ns": 117800, "instantiate_ns": 118900, "launch_max_ns": 118888, "launch_min_ns": 104038, "launch_net_ns": 112624, "launch_ns": 112906, "nodes": 128, "redundant_edges": 0, "shape": "chain", "zero_point_ns": 282},
+    {"depth": 8, "edges": 13, "instantiate_empty_ns": 900, "instantiate_max_ns": 77800, "instantiate_min_ns": 19100, "instantiate_net_ns": 19500, "instantiate_ns": 20400, "launch_max_ns": 14005, "launch_min_ns": 12878, "launch_net_ns": 12940, "launch_ns": 13221, "nodes": 8, "redundant_edges": 6, "shape": "redundant", "zero_point_ns": 281},
+    {"depth": 32, "edges": 61, "instantiate_empty_ns": 1100, "instantiate_max_ns": 267400, "instantiate_min_ns": 64900, "instantiate_net_ns": 82200, "instantiate_ns": 83300, "launch_max_ns": 57590, "launch_min_ns": 53575, "launch_net_ns": 55890, "launch_ns": 56175, "nodes": 32, "redundant_edges": 30, "shape": "redundant", "zero_point_ns": 285},
+    {"depth": 128, "edges": 253, "instantiate_empty_ns": 1500, "instantiate_max_ns": 413300, "instantiate_min_ns": 257400, "instantiate_net_ns": 265400, "instantiate_ns": 266900, "launch_max_ns": 271186, "launch_min_ns": 243856, "launch_net_ns": 248515, "launch_ns": 248802, "nodes": 128, "redundant_edges": 126, "shape": "redundant", "zero_point_ns": 287},
+    {"depth": 3, "edges": 12, "instantiate_empty_ns": 1300, "instantiate_max_ns": 122100, "instantiate_min_ns": 21500, "instantiate_net_ns": 23800, "instantiate_ns": 25100, "launch_max_ns": 17173, "launch_min_ns": 8452, "launch_net_ns": 8815, "launch_ns": 9102, "nodes": 8, "redundant_edges": 0, "shape": "forkjoin", "zero_point_ns": 287},
+    {"depth": 3, "edges": 60, "instantiate_empty_ns": 1300, "instantiate_max_ns": 229500, "instantiate_min_ns": 88200, "instantiate_net_ns": 106200, "instantiate_ns": 107500, "launch_max_ns": 24017, "launch_min_ns": 16116, "launch_net_ns": 16390, "launch_ns": 16675, "nodes": 32, "redundant_edges": 0, "shape": "forkjoin", "zero_point_ns": 285},
+    {"depth": 3, "edges": 252, "instantiate_empty_ns": 1100, "instantiate_max_ns": 1319700, "instantiate_min_ns": 432800, "instantiate_net_ns": 505400, "instantiate_ns": 506500, "launch_max_ns": 67928, "launch_min_ns": 59303, "launch_net_ns": 61728, "launch_ns": 62014, "nodes": 128, "redundant_edges": 0, "shape": "forkjoin", "zero_point_ns": 286}
+  ],
+  "schema_version": 1
+}

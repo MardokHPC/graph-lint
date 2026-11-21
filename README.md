@@ -104,13 +104,13 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 212 GoogleTest cases in ten binaries (`config` 3,
-`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 16, `gate` 27, `weights` 21,
-`demo_check` 5). ctest runs 35 entries: those ten, `artifacts_locale`, `report_ns_determinism`, and
-twenty-three process-level entries that run the two tools and assert exit codes, stderr and byte
-equality. `ctest --test-dir build-host -V` prints the per-binary counts. `artifacts_locale` is not a
-GoogleTest binary: it reruns `emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and
-`TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
+The host suite needs no CUDA toolkit and no GPU: 220 GoogleTest cases in eleven binaries (`config` 3,
+`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 22, `gate` 27, `weights` 21,
+`demo_check` 5, `bench` 2). ctest runs 36 entries: those eleven, `artifacts_locale`,
+`report_ns_determinism`, and twenty-three process-level entries that run the two tools and assert
+exit codes, stderr and byte equality. `ctest --test-dir build-host -V` prints the per-binary counts.
+`artifacts_locale` is not a GoogleTest binary: it reruns `emit_artifacts` in a second process under
+`LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -135,6 +135,11 @@ for all four (`sha256sum graphs/*.json` before and after the second run). They w
 machine: RTX 2060 SUPER (sm_75), driver 610.88 reporting CUDA API 13.3, runtime 12.6. Environment
 and full evidence: `graphs/REPORT.md`. The M0 spike measured the same numbers with a separate
 implementation (`experiments/m0_graph/REPORT.md`).
+
+`build-device.bat bench` answers the other question, what a graph pays for its dependencies: it
+builds `tools/bench.cu` against `cuda-timer` v1.2.2 and rewrites `docs/bench/bench.json`. The table
+with its min-max intervals, the protocol, and the three reasons a number from it cannot be quoted
+alone are in [`docs/bench.md`](docs/bench.md).
 
 CI runs two jobs:
 
@@ -225,6 +230,7 @@ graph-lint/
 │   │   ├── report_out.cmake
 │   │   └── run_expect.cmake
 │   ├── test_analysis.cpp
+│   ├── test_bench_report.cpp
 │   ├── test_config.cpp
 │   ├── test_emitters.cpp
 │   ├── test_gate.cpp
@@ -236,6 +242,7 @@ graph-lint/
 │   ├── test_rules.cpp
 │   └── test_weights.cpp
 ├── tools/
+│   ├── bench.cu
 │   ├── emit_artifacts.cpp
 │   ├── gate.cpp
 │   ├── report.cpp
@@ -255,6 +262,9 @@ graph-lint/
 │   ├── pingpong.mmd
 │   └── REPORT.md
 ├── docs/
+│   ├── bench/
+│   │   └── bench.json
+│   ├── bench.md
 │   ├── CONVENTIONS.md
 │   ├── emitters.md
 │   ├── limits.md

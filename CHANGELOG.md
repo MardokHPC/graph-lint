@@ -42,6 +42,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nanoseconds; with uniform weights the weighted path is the hop path. `graphlint_gate` compares
   `path_ns` under `--max-path-increase-ns` and refuses a threshold whose unit does not match the
   pair.
+- `tools/bench.cu`, built only with `GRAPHLINT_BUILD_BENCH=ON` against `cuda-timer` v1.2.2: the same
+  `noop` workload as a chain, a chain with implied skip edges, and a fork-join, swept over N and
+  timed for instantiate and launch with zero points and a discarded warm-up sweep. The measured
+  table, the command and the caveats are `docs/bench.md`; the raw document is
+  `docs/bench/bench.json`.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.

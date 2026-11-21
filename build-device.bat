@@ -12,9 +12,11 @@ rem the host code is also compiled by /W4 /WX through -Xcompiler (CMakeLists.txt
 rem
 rem Two options on purpose: GRAPHLINT_WITH_CUDA builds src/cuda_source.cpp with
 rem cudart only; GRAPHLINT_BUILD_DEVICE_TESTS adds nvcc, the demo and the GPU suite.
+rem GRAPHLINT_BUILD_BENCH adds nvcc, tools/bench.cu and cuda-timer (FetchContent).
 rem
-rem Usage:  build-device.bat <configure|build|demo|test|clean> [build-dir]
+rem Usage:  build-device.bat <configure|build|demo|bench|test|clean> [build-dir]
 rem    demo        run demo_graph, which rewrites graphs/*.json in the source tree
+rem    bench       configure with the benchmark on, build it, write docs/bench/bench.json
 rem ---------------------------------------------------------------------------
 setlocal
 if "%~1"=="" goto usage
@@ -25,7 +27,9 @@ if "%BUILD%"=="" set "BUILD=build-dev"
 rem A relative build dir resolves against the repo root, not the caller's cwd.
 if not "%BUILD:~1,1%"==":" set "BUILD=%~dp0%BUILD%"
 
-set "CUDA_NVCC=%ProgramFiles%\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\nvcc.exe"
+set "CUDA_HOME=%ProgramFiles%\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
+set "CUDA_NVCC=%CUDA_HOME%\bin\nvcc.exe"
+set "BENCH_FLAG="
 
 call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 if errorlevel 1 exit /b 1
@@ -34,17 +38,37 @@ if /i "%~1"=="clean" goto clean
 if /i "%~1"=="configure" goto configure
 if /i "%~1"=="build" goto build
 if /i "%~1"=="demo" goto demo
+if /i "%~1"=="bench" goto bench
 if /i "%~1"=="test" goto test
 goto usage
 
 :configure
+call :configure_cmake
+exit /b %errorlevel%
+
+:bench
+set "BENCH_FLAG=-DGRAPHLINT_BUILD_BENCH=ON"
+rem 12.1 comes first on PATH here; the numbers must come from the toolkit the binary
+rem was compiled against, the same reason CMAKE_CUDA_COMPILER is pinned.
+set "PATH=%CUDA_HOME%\bin;%PATH%"
+call :configure_cmake
+if errorlevel 1 exit /b 1
+cmake --build "%BUILD%" --target bench
+if errorlevel 1 exit /b 1
+rem From the repo root: the default --out path is relative to the caller's cwd.
+cd /d "%~dp0"
+"%BUILD%\bench.exe"
+exit /b %errorlevel%
+
+:configure_cmake
 cmake -S "%~dp0." -B "%BUILD%" -G Ninja ^
     -DCMAKE_BUILD_TYPE=Release ^
     "-DCMAKE_CUDA_COMPILER=%CUDA_NVCC%" ^
     -DCMAKE_CUDA_ARCHITECTURES=75 ^
     -DGRAPHLINT_BUILD_TESTS=ON ^
     -DGRAPHLINT_WITH_CUDA=ON ^
-    -DGRAPHLINT_BUILD_DEVICE_TESTS=ON
+    -DGRAPHLINT_BUILD_DEVICE_TESTS=ON ^
+    %BENCH_FLAG%
 exit /b %errorlevel%
 
 :build

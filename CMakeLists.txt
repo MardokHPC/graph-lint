@@ -12,7 +12,7 @@ project(graphlint
 # ---------------------------------------------------------------------------
 option(GRAPHLINT_BUILD_TESTS "Build the host test suite (fetches GoogleTest)" ON)
 option(GRAPHLINT_WITH_CUDA "Build the cudaGraph_t conversion in src/cuda_source.cpp" OFF)
-# Fetches cuda-timer for tools/bench.cu; arrives in M7.
+# Fetches cuda-timer for tools/bench.cu; needs nvcc and a GPU to run.
 option(GRAPHLINT_BUILD_BENCH "Build the instantiate/launch benchmark (needs a GPU)" OFF)
 # Two knobs on purpose: the library needs cudart only, nvcc and a GPU are needed
 # only to regenerate graphs/*.json and to run the suite that opens a handle.
@@ -31,10 +31,11 @@ if(GRAPHLINT_BUILD_DEVICE_TESTS AND NOT GRAPHLINT_BUILD_TESTS)
         "-DGRAPHLINT_BUILD_TESTS=ON as well.")
 endif()
 
-if(GRAPHLINT_BUILD_BENCH)
+if(GRAPHLINT_BUILD_BENCH AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
-        "GRAPHLINT_BUILD_BENCH=ON is not buildable yet: tools/bench.cu and its pinned "
-        "cuda-timer FetchContent arrive in M7. Configure with -DGRAPHLINT_BUILD_BENCH=OFF.")
+        "GRAPHLINT_BUILD_BENCH=ON needs GRAPHLINT_WITH_CUDA=ON: tools/bench.cu reads every "
+        "graph back through src/cuda_source.cpp, so the number is the graph the linter "
+        "sees. Configure with -DGRAPHLINT_WITH_CUDA=ON, or turn the benchmark off.")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -136,6 +137,38 @@ graphlint_apply_warnings(graphlint_gate)
 if(GRAPHLINT_WITH_CUDA)
     target_compile_definitions(graphlint_report PRIVATE GRAPHLINT_CLI_WITH_CUDA=1)
     target_link_libraries(graphlint_report PRIVATE graphlint_cuda)
+endif()
+
+# ---------------------------------------------------------------------------
+# Benchmark (tools/bench.cu)
+#
+# cuda-timer is header-only: its sources are populated and its CMakeLists is never
+# added, so its install rules (headers, package config, CPack) cannot reach our
+# package. The INTERFACE target below is ours and is one include directory wide.
+# ---------------------------------------------------------------------------
+if(GRAPHLINT_BUILD_BENCH)
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES 75 CACHE STRING
+            "Architecture of the benchmark kernels; override for another card")
+    endif()
+    enable_language(CUDA)
+
+    include(FetchContent)
+    FetchContent_Declare(cuda_timer
+        GIT_REPOSITORY https://github.com/MardokHPC/cuda-timer.git
+        GIT_TAG v1.2.2
+        GIT_SHALLOW TRUE
+        # include/ holds no CMakeLists.txt: populated, never added as a subdirectory.
+        SOURCE_SUBDIR include
+    )
+    FetchContent_MakeAvailable(cuda_timer)
+
+    add_library(graphlint_bench_timer INTERFACE)
+    target_include_directories(graphlint_bench_timer INTERFACE ${cuda_timer_SOURCE_DIR}/include)
+
+    add_executable(bench tools/bench.cu)
+    target_link_libraries(bench PRIVATE graphlint_cuda CUDA::cudart graphlint_bench_timer)
+    graphlint_apply_cuda_warnings(bench)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -282,6 +315,13 @@ if(GRAPHLINT_BUILD_TESTS)
         GRAPHLINT_ENABLE_ASSERTS=1
         GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs"
         GRAPHLINT_WEIGHTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/weights")
+
+    # The benchmark artifact is opt-in: `build-device.bat bench` writes it on a GPU box,
+    # and this entry skips when the file is absent. Nothing here asserts a timing.
+    graphlint_add_test(graphlint_test_bench tests/test_bench_report.cpp)
+    target_compile_definitions(graphlint_test_bench PRIVATE
+        GRAPHLINT_BENCH_JSON="${CMAKE_CURRENT_SOURCE_DIR}/docs/bench/bench.json")
+    set_tests_properties(graphlint_test_bench PROPERTIES SKIP_RETURN_CODE 77)
 
     # Exit codes are the contract of docs/report.md section 4, so the assertions are numbers
     # and the stderr line that names the failed comparison, never stdout alone.
