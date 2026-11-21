@@ -1,8 +1,9 @@
 # Weights — the contract M7a must satisfy
 
 ## 1. The weights file
-`weights.json`, written by `tools/weights.cu` (§5.6) and never by hand: one row per node, `id → ns`,
-sorted keys, rows by id, LF — the grammar of `graph.json`. Complete file for `diamond.json`:
+`weights.json`, written by `tools/weights.cu` (protocol in `bench.md`) and never by hand: one row
+per node, `id → ns`, sorted keys, rows by id, LF — the grammar of `graph.json`. Complete file
+for `diamond.json`:
 
 ```json
 {
@@ -75,8 +76,9 @@ key, and v1.0 is unreleased, so v2 costs six fixtures now and every committed re
 
 `path_ns` compares only when **both** sides are `ns`; `different weight_kind` is already suspect, and `path`
 differing while `path_ns` matches is a **note**. No default for the ns threshold, against the `0` of the
-others: a level is exact, a nanosecond a measurement, so absent means `context`. Depth is refused on an `ns`
-pair because it only stood in for time (§5.1); it keeps its delta as `context`, and the other two still decide.
+others: a level is exact, a nanosecond a measurement, so absent means `context`. Depth is refused
+on an `ns` pair because it only stood in for time: a level is a dependency, not a duration
+(`topology.md`); it keeps its delta as `context`, and the other two still decide.
 The wrong-unit refusals are two ctest cases: two `ns` reports with `--max-depth-increase 0`, and a
 levels report with `--max-path-increase-ns`, both exit 2. The mixed pair (levels vs `ns`) is a third case,
 suspect with no flags at all.
@@ -87,7 +89,8 @@ in `levels`; with weights `1` the two agree (§3), so the four `.mmd` artifacts 
 untouched: a middle member's only in-edge comes from a member with one out-edge, so no path enters a chain in
 the middle and a chain is wholly on or off; labels stay `kernel#<head>×<count>`, no weight on them, a chain sum
 being a path total only when the chain is on the path. JSON carries `path_ns` as an integer, never `ms`; text
-prints `4200000 ns (4.200 ms)` by integer division; summary `critical_path: 0 1 3 (1000 ns)`, or `(3 hops)`.
+prints `(4200000 ns, 4.200 ms)` by integer division; summary
+`critical_path: 0 1 3 (1000 ns, 0.001 ms)`, or `(3 hops)`.
 
 ## 7. What it is not
 - **Not a measurement.** The linter sums integers; `weights.cu` measures under `GRAPHLINT_BUILD_BENCH`, core C++17.

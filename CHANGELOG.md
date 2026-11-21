@@ -58,6 +58,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.
+- `docs/topology.md`: what a level, the depth, the width per level, the transitive reduction and the
+  weighted path mean, with the worked example over `graphs/captured.json` and
+  `graphs/pingpong.json`.
 
 ### Changed
 

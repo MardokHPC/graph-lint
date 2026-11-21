@@ -4,12 +4,13 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M7 of nine milestones are closed: a `ns` weights table applies to the model, the critical
+M0 to M8 of nine milestones are closed: a `ns` weights table applies to the model, the critical
 path becomes the heaviest path, the gate compares `path_ns`, and a device tool measures one node at
 a time to produce the table. The tree holds the graph model, the JSON contract (schema v2 for
 reports), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters,
 the report, the CI gate and the two command-line tools, the demo that produced the four artifacts in
-`graphs/`, and CI. The worked example and the final topology document are not here.
+`graphs/`, the worked example `examples/three_lines.cu`, and the topology document
+`docs/topology.md`.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
@@ -169,7 +170,7 @@ CI runs two jobs:
 | job | environment | what it does |
 |---|---|---|
 | `host-only` | ubuntu-22.04, windows-2022, no toolkit | builds the core and runs the host suite |
-| `cuda` | ubuntu-22.04 with CUDA 11.8 and 12.1, windows-2022 with 12.9 | compiles the reader, the demo and the device suite on sm_75 |
+| `cuda` | ubuntu-22.04 with CUDA 11.8 and 12.1, windows-2022 with 12.9 | compiles the reader, the demo, the example and the device suite on sm_75 |
 
 The `cuda` job has no GPU: it proves the CUDA path compiles, not that it reads a handle. The
 host-only job also installs the package into a scratch prefix and builds `tests/consumer` against
@@ -244,6 +245,8 @@ graph-lint/
 │   │   ├── baseline.json
 │   │   ├── depth_plus_one.json
 │   │   ├── host_node.json
+│   │   ├── ns_baseline.json
+│   │   ├── ns_path_plus_one.json
 │   │   ├── ns_weights.json
 │   │   ├── other_source.json
 │   │   └── truncated.json
@@ -258,6 +261,7 @@ graph-lint/
 │   │   ├── report_determinism.cmake
 │   │   ├── report_out.cmake
 │   │   └── run_expect.cmake
+│   ├── check_artifacts.cmake
 │   ├── test_analysis.cpp
 │   ├── test_bench_report.cpp
 │   ├── test_config.cpp

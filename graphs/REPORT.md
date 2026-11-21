@@ -28,7 +28,7 @@ set CUDA_VISIBLE_DEVICES=-1 && ctest --test-dir build-dev --output-on-failure
    with `/W4 /WX` on the host TUs and `-Xcompiler=/W4 -Xcompiler=/WX` on the `.cu` files
    (no `-Wpedantic`, as agreed: nvcc's `#line` directives are not ours).
 3. `ctest` on the GPU box: green — the host entries plus `graphlint_test_cuda`
-   (5 cases: chain + geometry, `cudaMallocAsync` alloc/free nodes, child graph, the depth
+   (the device suite: chain + geometry, `cudaMallocAsync` alloc/free nodes, child graph, the depth
    bound, live capture 25/29).
 4. Same `ctest` with no visible card: `graphlint_test_cuda` exits 77, ctest prints the entry
    `***Skipped`, exit code 0. The host entries, `demo_check` included, still run: none of them

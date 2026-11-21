@@ -60,11 +60,11 @@ floor (depth 15) or write the guard as `depth >= N`.
 fires only on C, a 1000-chain built to satisfy it, so that firing carries no information. The
 rule with material is `redundant-edge` (1/29 on B, 10/21 on D), which the gate never tested.
 
-Consequences: (1) §0.1's mechanism is wrong, its conclusion is not — no Empty joins; redundant
+Consequences: (1) the original mechanism is wrong, its conclusion is not — no Empty joins; redundant
 edges come from event-wait edges duplicating stream order (in D every node depends on i−1 by
-stream order and i−2 by the event). (2) §5.2's "grafi catturati, dove 0 è la risposta giusta"
-must go: it makes D's 10 true findings look like a tool bug. The §9 prediction (HANDOFF:454)
+stream order and i−2 by the event). (2) the claim that on captured graphs "0 is the right answer"
+must go: it makes D's 10 true findings look like a tool bug. The predicted ranking
 inverts on captures — `redundant-edge` > `pointless-fork` > `launch-shaped` — and the planned
-demotion of `redundant-edge` to info (HANDOFF:456) is cancelled. (3) After the fix,
+demotion of `redundant-edge` to info is cancelled. (3) After the fix,
 `pointless-fork` keeps only the 1-kernel-per-branch diamond, the smallest honest fork, not a
 demonstrated defect: re-specify or demote it before M4.

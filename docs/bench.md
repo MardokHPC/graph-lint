@@ -21,23 +21,25 @@ net columns subtract the empty graph measured by the same procedure. Each row is
 
 | shape | N | nodes | edges | depth | redundant | instantiate net | launch net |
 |---|---|---|---|---|---|---|---|
-| chain | 8 | 8 | 7 | 8 | 0 | 8.9 [7.8-30.1] | 7.7 [7.4-12.2] |
-| chain | 32 | 32 | 31 | 32 | 0 | 28.4 [27.9-55.8] | 27.0 [26.0-33.2] |
-| chain | 128 | 128 | 127 | 128 | 0 | 117.8 [112.9-184.5] | 112.6 [103.8-118.6] |
-| redundant | 8 | 8 | 13 | 8 | 6 | 19.5 [18.2-76.9] | 12.9 [12.6-13.7] |
-| redundant | 32 | 32 | 61 | 32 | 30 | 82.2 [63.8-266.3] | 55.9 [53.3-57.3] |
-| redundant | 128 | 128 | 253 | 128 | 126 | 265.4 [255.9-411.8] | 248.5 [243.6-270.9] |
-| forkjoin | 8 | 8 | 12 | 3 | 0 | 23.8 [20.2-120.8] | 8.8 [8.2-16.9] |
-| forkjoin | 32 | 32 | 60 | 3 | 0 | 106.2 [86.9-228.2] | 16.4 [15.8-23.7] |
-| forkjoin | 128 | 128 | 252 | 3 | 0 | 505.4 [431.7-1318.6] | 61.7 [59.0-67.6] |
+| chain | 8 | 8 | 7 | 8 | 0 | 9.4 [8.7-33.9] | 7.5 [7.5-11.3] |
+| chain | 32 | 32 | 31 | 32 | 0 | 27.5 [28.3-49.9] | 27.8 [26.3-33.5] |
+| chain | 128 | 128 | 127 | 128 | 0 | 117.8 [112.9-247.6] | 116.1 [108.5-121.0] |
+| redundant | 8 | 8 | 13 | 8 | 6 | 20.3 [19.4-84.6] | 13.1 [12.9-16.7] |
+| redundant | 32 | 32 | 61 | 32 | 30 | 65.9 [63.8-212.7] | 55.8 [53.1-56.9] |
+| redundant | 128 | 128 | 253 | 128 | 126 | 260.8 [253.6-399.7] | 248.1 [247.0-252.7] |
+| forkjoin | 8 | 8 | 12 | 3 | 0 | 22.2 [21.7-77.5] | 8.9 [8.8-14.6] |
+| forkjoin | 32 | 32 | 60 | 3 | 0 | 103.1 [86.2-149.0] | 16.2 [15.9-19.5] |
+| forkjoin | 128 | 128 | 252 | 3 | 0 | 424.8 [417.9-729.2] | 61.1 [59.1-63.1] |
 
 Microseconds, `median [min-max]`, from the run in [`bench/bench.json`](bench/bench.json); the
-document holds nanoseconds, integers only.
+document holds nanoseconds, integers only. The median is the net column (`*_net_ns`, the empty
+floor subtracted); the interval is the raw `*_min_ns`–`*_max_ns` of the same 21 samples. The table
+restates the committed `bench.json`; regenerating the JSON rewrites this table or the doc lies.
 
 ## Read this before quoting a number
 
 1. **Not byte-reproducible.** Three runs of the same binary move a median by a few percent, and
-   `max` is a single worst sample, not a regime (30.1 us against a median of 8.9 on `chain` at 8
+   `max` is a single worst sample, not a regime (33.9 us against a median of 9.4 on `chain` at 8
    nodes). The interval is the datum; a median alone is one draw. The discarded sweep is what keeps
    the `chain` baseline usable: without it the same cell has read 115 to 254 us across processes on
    this machine.
@@ -97,7 +99,7 @@ this graph cannot be shorter, and every node is on that chain, so no single kern
 number (`weights.json` has the eight). It is not the frame time, and a weight is a lower bound of
 its node: the zero point is the floor of an exec with every node disabled, and on this machine it
 sits ~8 µs above the floor a one-node launch actually pays, so every weight is low by that much —
-~19% of id 0, ~4% of the 1.5 ms sum, the error largest on the smallest node. Each node also runs
-alone, with the whole card and nothing contending, so the sum is a lower bound of a serial
+~22% of id 0 (36507 ns), ~4% of the 1.5 ms sum, the error largest on the smallest node. Each node
+also runs alone, with the whole card and nothing contending, so the sum is a lower bound of a serial
 execution and never a measured duration. Re-measure on another driver and the table changes while
 the fingerprint does not; the file cannot tell.

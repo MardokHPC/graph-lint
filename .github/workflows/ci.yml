@@ -1,9 +1,10 @@
 # graph-lint CI.
 #
 # Two jobs run: host-only builds and tests the pure C++17 core with no CUDA
-# toolkit, cuda compiles the CUDA path (src/cuda_source.cpp, the device suites,
-# the demo) with nvcc. Hosted runners have no GPU, so the CUDA job compiles but
-# does not execute: the device suites exit 77 and ctest reports them SKIPPED.
+# toolkit, cuda compiles the CUDA path (src/cuda_source.cpp, the example, the
+# device suites, the demo) with nvcc. Hosted runners have no GPU, so the CUDA job
+# compiles but does not execute: the device suites and the example exit 77 and
+# ctest reports them SKIPPED.
 
 name: CI
 
@@ -126,7 +127,8 @@ jobs:
 
       # Device tests ON on purpose: it makes nvcc compile the .cu fixtures and
       # enable_language(CUDA), so the job proves the CUDA path instead of only
-      # compiling a host TU against the headers.
+      # compiling a host TU against the headers. Examples too: the entry exits
+      # 77 on a runner with no card, but the compile is what CI is here for.
       - name: Configure (CUDA ON, tests ON, device tests ON)
         run: >
           cmake -S . -B build -G Ninja
@@ -135,6 +137,7 @@ jobs:
           -DGRAPHLINT_BUILD_TESTS=ON
           -DGRAPHLINT_WITH_CUDA=ON
           -DGRAPHLINT_BUILD_DEVICE_TESTS=ON
+          -DGRAPHLINT_BUILD_EXAMPLES=ON
 
       - name: Build (warnings are errors, headers included)
         run: cmake --build build

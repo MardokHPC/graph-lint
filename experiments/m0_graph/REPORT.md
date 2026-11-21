@@ -99,7 +99,7 @@ capture shows that the rule, as written, duplicates `redundant-edge`.
 
 1. **The capture does not introduce `Empty` nodes.** 0 out of 25 nodes in B, 0 out of 12 in D. Joins
    become multiple in-edges on the consumer node (in B the 4-branch join is a single node with 4
-   predecessors). The HANDOFF §0.1 assumption — "nested joins produce `Empty` join nodes" — does not
+   predecessors). The original assumption — "nested joins produce `Empty` join nodes" — does not
    hold on this machine. Consequence for M2/M3: `from_cuda` must work without counting on Empty
    nodes, and `pointless-fork` cannot use them as a signal.
 2. **`redundant-edge` has material on captured graphs too**, so it is not a "builder-only" rule:

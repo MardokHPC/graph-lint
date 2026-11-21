@@ -53,9 +53,10 @@ Bad — the code below already says it:
   `O(E(V+E))`.
 - `rules.md` — per rule: what it measures, the known false positive, what to do. A rule without its
   false-positive sentence is not written; `applicable` / `not_applicable` per source live here too.
-- `formats.md` — JSON schema v1 (sorted keys, no timestamp or paths, `schema_version`), byte-for-byte
-  determinism, why the DOT is ours (ids shared with the JSON, readable diff) and why
-  `cudaGraphDebugDotPrint` is not the backend; Mermaid only compressed and under `--max-nodes`.
+- `report.md`, `emitters.md`, `include/graphlint/json.hpp` — the JSON contracts (sorted keys, no
+  timestamp or paths, `schema_version`), byte-for-byte determinism, why the DOT is ours (ids shared
+  with the JSON, readable diff) and why `cudaGraphDebugDotPrint` is not the backend; Mermaid only
+  compressed and under `--max-nodes`.
 - `limits.md` — the table of what cannot be known: kernel name and parameters, mutations on the exec,
   the effect of instantiate, durations, host-side `cudaMalloc`. Read it before trusting a verdict.
 
@@ -64,10 +65,10 @@ whoever upgrades. The same six-word sentence in two files is already a duplicate
 
 ## 5. README
 
-Mandatory sections, in this order: What it is (incumbent table, `cudaGraphDebugDotPrint` on the first
-line of "What it is not"); When to use it (table against the incumbents); Limits (links
-`docs/limits.md`, does not copy it); Quality (test count and CI matrix, numbers reproducible with
-`ctest`); Repository structure (full tree).
+Mandatory sections, in this order: What it is (the links to `docs/`); What it is not (the table
+against the incumbents, `cudaGraphDebugDotPrint` first); When to use it (three audiences and the two
+commands); Limits (links `docs/limits.md`, does not copy it); Quality (test count and CI matrix,
+numbers reproducible with `ctest`); Repository structure (full tree).
 
 A number is written only if it is measured, if the command that reproduces it sits next to it and if
 the raw file is committed in `docs/bench/`. A number that cannot be reproduced is a bug in the README.
@@ -120,8 +121,8 @@ GCC fails with `-Werror=unused-result`, so the `(void)` cast goes in the same co
 - No PyTorch, Python or bindings in v1.0.
 - Only `cuda_source.hpp` may name CUDA types; `<cuda_runtime.h>` is included only in `src/cuda_source.cpp`.
 - No number without its artifact in `docs/bench/`.
-- No absolute paths, usernames or local plans in tracked files: `HANDOFF.md` stays out, decisions that
-  matter go into `docs/`.
+- No absolute paths, usernames or local plans in tracked files: the handoff document stays out,
+  decisions that matter go into `docs/`.
 - No undeclared dependency: the library has none.
 - A false positive gets documented, not turned into a threshold to make CI pass.
 

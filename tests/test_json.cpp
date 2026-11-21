@@ -11,7 +11,7 @@
 
 namespace {
 
-// §2 of PLAN_M2, byte for byte: writer, parser and the committed file all
+// The golden document, byte for byte: writer, parser and the committed file all
 // compare against this literal, so a format change cannot move both sides.
 const char* const k_golden_document = R"json({
   "children": [

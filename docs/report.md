@@ -1,6 +1,6 @@
 # Report and gate — the contract M6 must satisfy
 
-## 1. `report.json`, schema v1
+## 1. `report.json`, schema v2
 
 A two-node `built` graph, `kernel → host`, as `graphlint_report --format json` writes it: 2-space
 indent, keys alphabetical in every object, one node object and one edge pair per line, LF.

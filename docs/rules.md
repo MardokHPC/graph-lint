@@ -37,11 +37,11 @@ can overlap and the graph pays the launch path only. Integers, never a float. Me
 over 1000 nodes: no two nodes can overlap" — `levels`, never a duration.
 
 **Never fires** below the guard: `pingpong.json` is 12 levels over 12 nodes (ratio 1.00) and stays
-silent on purpose, the limit §5.1 declares. The ratio is the rule, not the floor: a bare
-`depth >= 15` fires on `captured.json`, which is 15 levels over 25 nodes. M0's "15 is silent, 16
-fires" is about chains, where `depth == nodes`.
-**Reader**: measure whether the graph earns its keep (`cuda-timer`, §5.6); if not, run the kernels
-without it.
+silent on purpose: a level is a dependency, not a time (`limits.md`). The ratio is the rule, not the
+floor: a bare `depth >= 15` fires on `captured.json`, which is 15 levels over 25 nodes. M0's "15 is
+silent, 16 fires" is about chains, where `depth == nodes`.
+**Reader**: measure whether the graph earns its keep (`cuda-timer`, the protocol in `bench.md`); if
+not, run the kernels without it.
 **Applies** to `capture`, `built`, `file`: on a graph with no edges at all it is the only rule with
 something to say.
 
@@ -53,14 +53,14 @@ path; the minimal DAG has 11 edges", with the verb following the count — `1 of
 
 **Never fires** without an alternative path, and the registered caveat is not the algorithm: an edge
 carrying a port (12.3+) arrives from `cudaGraphGetEdges` as a plain dependency (`limits.md`), so an
-implied edge can be the only carrier of a port. It reports, never removes (§10).
+implied edge can be the only carrier of a port. It reports, never removes (`limits.md`).
 
 **0 is an answer**: `built.json` 0 of 30, `chain.json` 0 of 999. On a capture it is possible, not the
 expectation: the clean 4-stream capture measures 1 of 29, the ping-pong 10 of 21, where the minimal
 DAG is the 11-edge chain. `0` reads as the right answer, never as a broken rule.
 **Reader**: look at the endpoints; deleting one is a decision about ports, timing, buffer reuse.
 **Applies** to `capture`, `built`, `file`, and on `capture` it is the flagship (10 of 21) and the
-reason the tool exists (§0.1).
+reason the tool exists.
 
 ## `sync-node` — `severe` / `info`
 **Measures** `host` (`severe`, one finding per node: a CPU callback serialises its stream and waits
@@ -101,7 +101,7 @@ j=4`, `captured.json` `u=0 j=3`. A real two-way split, hence `info` and an aggre
 kernel nodes, every one `1×1×1` and unnamed (`graphs/REPORT.md`); on geometry alone the rule would
 report 27 candidates on `built.json` and 1000 on `chain.json`, a 1000-line report carrying nothing.
 So equal non-empty names only, and fewer than two named kernels is `not_applicable` with `no kernel
-name`. Cutting it is §7's first option; as written it documents its own blindness.
+name`. Cutting it is an option; as written it documents its own blindness.
 **Reader**: check the call site; the arguments are the difference and the tool cannot see them.
 **Applies** to `capture`, `built`, `file`, conditionally on names: dark until the reader resolves
 `func`, or until a document carries a name.
@@ -167,7 +167,8 @@ with the same node list, so the key is unique and two runs are byte-identical.
 | `warn` | a finding a human must weigh; blocks when the gate counts it | 0 |
 | `info` | context, never a defect | 0 |
 
-Four values, no fifth. `error` is 2: "verdict not sustainable" is exit 2 in the suite (§3.6), and a
-graph failing `dag-check` has no verdict. `warn` is 0 by default — a clean capture legitimately
-reports `redundant-edge` on 1 of 29 — and `graphlint_gate` makes it 1 only when a threshold names it.
+Four values, no fifth. `error` is 2: "verdict not sustainable" is exit 2 in the suite
+(`report.md` §2), and a graph failing `dag-check` has no verdict. `warn` is 0 by default — a clean
+capture legitimately reports `redundant-edge` on 1 of 29 — and `graphlint_gate` makes it 1 only
+when a threshold names it.
 

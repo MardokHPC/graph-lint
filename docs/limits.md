@@ -19,7 +19,7 @@ choice of this tool, not a defect waiting for a fix.
 
 | what | what survives |
 |---|---|
-| edge port/data (12.3+) | `cudaGraphGetEdges` returns the pair, so an edge with a port arrives as a plain dependency. A port-aware rule needs schema v2. |
+| edge port/data (12.3+) | `cudaGraphGetEdges` returns the pair, so an edge with a port arrives as a plain dependency. A port-aware rule needs a graph document bump. |
 | `ExtSemaphoreSignal` vs `ExtSemaphoreWait` | both decode as `ext_semaphore`; no rule needs the direction. |
 | `Conditional` (12.6, 0x0d) and any newer node type | `unknown`; the node keeps its id and no rule reads it. |
 | nesting deeper than `k_max_graph_depth` (8 levels) | `from_cuda` returns false naming `cudaGraphChildGraphNodeGetGraph`, `parse_graph` returns `TooDeep`; the two bounds are one constant. |

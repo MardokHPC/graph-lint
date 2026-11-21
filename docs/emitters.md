@@ -3,7 +3,7 @@
 ## 1. API
 
 ```cpp
-struct DotOptions { bool detail_params = false; };   // --dot-detail=params
+struct DotOptions { bool detail_params = false; };   // --detail-params
 struct MermaidOptions { int max_nodes = 80; };       // --max-nodes
 [[nodiscard]] inline std::string to_dot(const Graph& g, const Topology& t, const DotOptions& o = {});
 [[nodiscard]] inline std::string to_mermaid(const Graph& g, const Topology& t,
