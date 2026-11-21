@@ -4,28 +4,63 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M4 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
-v1), the `cudaGraph_t` reader, the topology analysis, the rules, the demo that produced the four
-artifacts in `graphs/`, and CI. The DOT and Mermaid emitters, the two command-line tools and the
-benchmark are not here: the rules are a library call, and there is still no command that lints a
-graph.
+M0 to M5 of nine milestones are closed. The tree holds the graph model, the JSON contract (schema
+v1), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters, the
+demo that produced the four artifacts in `graphs/`, and CI. The two command-line tools and the
+benchmark are not here: the library lints a graph and draws it, and there is still no command that
+does either from a shell.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
 `dump_graph` and `parse_graph`, compute depth, width per level, the transitive reduction and the
-minimal DAG with `topology`, and turn all of it into findings with `lint`.
+minimal DAG with `topology`, turn all of it into findings with `lint`, and render the graph as DOT
+or Mermaid with `to_dot` and `to_mermaid`.
 
 ## What it is
 
 `graph-lint` will report the topology of a `cudaGraph_t`: depth in levels, width per level, the
 edges a transitive reduction removes and the minimal DAG that remains, the synchronization nodes
-(event record and wait, empty, external semaphore), and the peak device bytes held by the
+(host callbacks, event record and wait, external semaphore), and the peak device bytes held by the
 `cudaMallocAsync` nodes. The intended contract is one document per graph, fixed key order, no
 timestamp and no local path, so a report is a diffable artifact.
 
 The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `analysis.hpp` and the
 rules in `rules.hpp` are what that report will be built from. They exist today; the report does not.
 What each rule measures, and the case where it must stay silent, is `docs/rules.md`.
+
+The drawing below is `to_mermaid` of `graphs/captured.json`: four chains of three kernels are one
+box each (`kernel#4×3`, `kernel#7×3`, `kernel#10×3`, `kernel#13×3`), the one dashed edge is a pair
+the transitive reduction removes, and the red class is the longest path, five of the nine boxes. A
+host test compares this block with the emitter byte for byte, so the figure cannot drift on its own.
+
+```mermaid
+flowchart LR
+  n0["kernel#0"]
+  n1["kernel#1"]
+  n2["kernel#2"]
+  n3["kernel#3"]
+  n4["kernel#4×3"]
+  n7["kernel#7×3"]
+  n10["kernel#10×3"]
+  n13["kernel#13×3"]
+  n16["kernel#16×9"]
+  n0 --> n1
+  n0 --> n2
+  n1 --> n3
+  n2 --> n3
+  n2 -.-> n13
+  n3 --> n4
+  n3 --> n7
+  n3 --> n10
+  n3 --> n13
+  n4 --> n16
+  n7 --> n16
+  n10 --> n16
+  n13 --> n16
+  classDef critical stroke:#c00,stroke-width:2px
+  classDef sync fill:#f90
+  class n0,n1,n3,n4,n16 critical
+```
 
 ## What it is not
 
@@ -35,10 +70,10 @@ What each rule measures, and the case where it must stay silent, is `docs/rules.
 | Nsight Systems, Nsight Compute | a timeline and per-kernel counters with durations, not a verdict on the topology |
 | `cudaGraphGetNodes`, `cudaGraphGetEdges` | handle and edge arrays: any number built on them is twenty lines of your own code |
 
-`cudaGraphDebugDotPrint` sits first because it is the closest thing the toolkit ships. The DOT
-emitter planned here will differ on the three points that make a drawing diffable: ids shared with
-the JSON, order by id, and identical bytes across runs on the same driver. That emitter does not
-exist yet.
+`cudaGraphDebugDotPrint` sits first because it is the closest thing the toolkit ships. `to_dot`
+differs on the three points that make a drawing diffable: ids shared with the JSON, order by id, and
+identical bytes across runs on the same driver (`docs/emitters.md`). It is a drawing, not a verdict:
+the findings come from `lint`, and no emitter reads them.
 
 It is not a rewriter: the reduction is reported, never applied (`docs/limits.md`).
 
@@ -58,9 +93,12 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 124 GoogleTest cases in 6 ctest entries (`config` 3,
-`graph` 7, `json` 28, `analysis` 30, `rules` 51, `demo_check` 5). `build-host.bat test` runs them;
-`ctest --test-dir build-host -V` prints the per-binary `N tests from ... ran` lines that add up to 124.
+The host suite needs no CUDA toolkit and no GPU: 148 GoogleTest cases in 8 ctest entries
+(`config` 3, `graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `demo_check` 5).
+`build-host.bat test` runs them; `ctest --test-dir build-host -V` prints the per-binary
+`N tests from ... ran` lines that add up to 148. The eighth entry, `artifacts_locale`, is not a
+GoogleTest binary: it reruns `emit_artifacts` in a second process under `LC_ALL=de_DE.UTF-8` and
+`TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
 
 The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
@@ -106,6 +144,10 @@ time and needs no CUDA toolkit, no nvcc and no GPU:
     build-host.bat configure
     build-host.bat build
     build-host.bat test
+    build-host.bat artifacts
+
+`build-host.bat artifacts` rewrites `graphs/*.dot` and `graphs/*.mmd` from the four JSON, and both
+the suite and the README figure are then compared with those files byte for byte.
 
 The reader is compiled by `GRAPHLINT_WITH_CUDA=ON` and links `cudart` only, no nvcc. It needs a
 toolkit of 11.4 or newer, where the mem-node and child-graph getters arrive. nvcc enters only with
@@ -130,6 +172,8 @@ graph-lint/
 │   ├── analysis.hpp
 │   ├── config.hpp
 │   ├── cuda_source.hpp
+│   ├── emit_dot.hpp
+│   ├── emit_mermaid.hpp
 │   ├── graph.hpp
 │   ├── json.hpp
 │   └── rules.hpp
@@ -152,19 +196,31 @@ graph-lint/
 │   │   └── test_cuda_source.cu
 │   ├── test_analysis.cpp
 │   ├── test_config.cpp
+│   ├── test_emitters.cpp
 │   ├── test_graph.cpp
 │   ├── test_json.cpp
 │   ├── test_main.cpp
 │   ├── test_main_device.cpp
 │   └── test_rules.cpp
+├── tools/
+│   └── emit_artifacts.cpp
 ├── graphs/
+│   ├── built.dot
 │   ├── built.json
+│   ├── built.mmd
+│   ├── captured.dot
 │   ├── captured.json
+│   ├── captured.mmd
+│   ├── chain.dot
 │   ├── chain.json
+│   ├── chain.mmd
+│   ├── pingpong.dot
 │   ├── pingpong.json
+│   ├── pingpong.mmd
 │   └── REPORT.md
 ├── docs/
 │   ├── CONVENTIONS.md
+│   ├── emitters.md
 │   ├── limits.md
 │   └── rules.md
 ├── experiments/
