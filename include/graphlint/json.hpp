@@ -254,60 +254,16 @@ inline void append_utf8(std::string& out, std::uint32_t code) {
     }
 }
 
-struct RawNode {
-    Node node;
-    bool has_id = false;
-    bool has_type = false;
-    bool has_weight = false;
-    bool has_grid = false;
-    bool has_block = false;
-    bool has_shared_bytes = false;
-    bool has_alloc_bytes = false;
-    bool has_mem_ptr = false;
-    bool has_child = false;
-    std::size_t object_pos = 0;
-    std::size_t id_pos = 0;
-    std::size_t weight_pos = 0;
-    std::size_t grid_pos = 0;
-    std::size_t block_pos = 0;
-    std::size_t alloc_pos = 0;
-    std::size_t mem_ptr_pos = 0;
-    std::size_t child_pos = 0;
-};
-
-struct RawGraph {
-    std::vector<RawNode> nodes;
-    std::vector<std::pair<int, int>> edges;
-    std::vector<std::size_t> edge_positions;
-    std::vector<RawGraph> children;
-    SourceKind source = SourceKind::File;
-    WeightKind weight_kind = WeightKind::Levels;
-    std::size_t object_pos = 0;
-};
-
-class Parser {
+// The primitives of a document reader: whitespace, strings, integers, ordered keys and the
+// line/column convention, shared so graph.json and report.json cannot spell one fault two ways.
+class Scanner {
 public:
-    Parser(std::string_view text, GraphError& error) : text_(text), error_(error) {}
+    Scanner(std::string_view text, GraphError& error) : text_(text), error_(error) {}
 
-    [[nodiscard]] bool parse(Graph& out) {
-        skip_whitespace();
-        RawGraph root;
-        if (!parse_graph_object(root, 1, true)) {
-            return false;
-        }
-        skip_whitespace();
-        if (pos_ != text_.size()) {
-            return fail(GraphErrorKind::Trailing, pos_, "trailing bytes after the document");
-        }
-        Graph graph;
-        if (!finish(root, root.weight_kind, root.source, true, graph)) {
-            return false;
-        }
-        out = std::move(graph);
-        return true;
-    }
+    [[nodiscard]] std::size_t pos() const noexcept { return pos_; }
+    void seek(std::size_t pos) noexcept { pos_ = pos; }
+    [[nodiscard]] bool at_end() const noexcept { return pos_ >= text_.size(); }
 
-private:
     [[nodiscard]] int peek() const {
         if (pos_ >= text_.size()) {
             return -1;
@@ -327,28 +283,40 @@ private:
 
     [[nodiscard]] bool expect(char expected) {
         if (pos_ >= text_.size() || text_[pos_] != expected) {
-            return fail(GraphErrorKind::Syntax, pos_,
-                        std::string("expected '") + expected + "'");
+            return fail(GraphErrorKind::Syntax, pos_, std::string("expected '") + expected + "'");
         }
         ++pos_;
         return true;
     }
 
-    [[nodiscard]] bool fail(GraphErrorKind kind, std::size_t at, std::string detail) {
-        std::size_t line = 1;
-        std::size_t column = 1;
+    // Both 1-based; an offset past the end reports the end of the text.
+    void position_of(std::size_t at, int& line, int& column) const {
+        std::size_t row = 1;
+        std::size_t col = 1;
         const std::size_t limit = at < text_.size() ? at : text_.size();
         for (std::size_t i = 0; i < limit; ++i) {
             if (text_[i] == '\n') {
-                ++line;
-                column = 1;
+                ++row;
+                col = 1;
             } else {
-                ++column;
+                ++col;
             }
         }
+        line = static_cast<int>(row);
+        column = static_cast<int>(col);
+    }
+
+    [[nodiscard]] bool fail(GraphErrorKind kind, std::size_t at, std::string detail) {
+        int line = 0;
+        int column = 0;
+        position_of(at, line, column);
+        return fail_at(kind, line, column, std::move(detail));
+    }
+
+    [[nodiscard]] bool fail_at(GraphErrorKind kind, int line, int column, std::string detail) {
         error_.kind = kind;
-        error_.line = static_cast<int>(line);
-        error_.column = static_cast<int>(column);
+        error_.line = line;
+        error_.column = column;
         error_.detail = std::move(detail);
         return false;
     }
@@ -501,69 +469,6 @@ private:
         return true;
     }
 
-    [[nodiscard]] bool parse_u32(std::uint32_t& value) {
-        const std::size_t start = pos_;
-        std::uint64_t wide = 0;
-        if (!parse_uint64(wide)) {
-            return false;
-        }
-        if (wide > static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
-            return fail(GraphErrorKind::BadNumber, start, "value exceeds 32 bits");
-        }
-        value = static_cast<std::uint32_t>(wide);
-        return true;
-    }
-
-    [[nodiscard]] bool parse_dims(std::array<std::uint32_t, 3>& dims) {
-        if (!expect('[')) {
-            return false;
-        }
-        for (std::size_t i = 0; i < dims.size(); ++i) {
-            skip_whitespace();
-            if (!parse_u32(dims[i])) {
-                return false;
-            }
-            skip_whitespace();
-            if (i + 1 < dims.size() && !expect(',')) {
-                return false;
-            }
-        }
-        return expect(']');
-    }
-
-    [[nodiscard]] bool parse_mem_ptr(std::uint64_t& value) {
-        const std::size_t start = pos_;
-        std::string token;
-        if (!parse_string(token)) {
-            return false;
-        }
-        if (token.size() < 3 || token[0] != '0' || token[1] != 'x') {
-            return fail(GraphErrorKind::BadNumber, start,
-                        "mem_ptr must be 0x followed by hex digits");
-        }
-        std::uint64_t result = 0;
-        for (std::size_t i = 2; i < token.size(); ++i) {
-            const char ch = token[i];
-            int digit = -1;
-            if (ch >= '0' && ch <= '9') {
-                digit = ch - '0';
-            } else if (ch >= 'a' && ch <= 'f') {
-                digit = ch - 'a' + 10;
-            } else {
-                return fail(GraphErrorKind::BadNumber, start,
-                            "mem_ptr must be lowercase hexadecimal");
-            }
-            if (result > (std::numeric_limits<std::uint64_t>::max() -
-                          static_cast<std::uint64_t>(digit)) /
-                             16) {
-                return fail(GraphErrorKind::BadNumber, start, "mem_ptr exceeds 64 bits");
-            }
-            result = result * 16 + static_cast<std::uint64_t>(digit);
-        }
-        value = result;
-        return true;
-    }
-
     template <typename Handler>
     [[nodiscard]] bool parse_object(Handler&& handler) {
         if (!expect('{')) {
@@ -644,6 +549,165 @@ private:
             }
             return fail(GraphErrorKind::Syntax, pos_, "expected ',' or ']'");
         }
+    }
+
+    // End (exclusive) of the object or array starting at pos_. Strings may hold brackets and
+    // their contents are the caller's grammar, so only the extent is this reader's business.
+    [[nodiscard]] bool skip_compound(std::size_t& end) {
+        const int open = peek();
+        if (open != '{' && open != '[') {
+            return fail(GraphErrorKind::WrongType, pos_, "expected an object");
+        }
+        int depth = 0;
+        std::size_t i = pos_;
+        while (i < text_.size()) {
+            const char ch = text_[i];
+            if (ch == '"') {
+                ++i;
+                while (i < text_.size() && text_[i] != '"') {
+                    i += text_[i] == '\\' ? 2 : 1;
+                }
+                if (i >= text_.size()) {
+                    return fail(GraphErrorKind::Syntax, i, "unterminated string");
+                }
+                ++i;
+                continue;
+            }
+            if (ch == '{' || ch == '[') {
+                ++depth;
+            } else if (ch == '}' || ch == ']') {
+                --depth;
+                if (depth == 0) {
+                    end = i + 1;
+                    return true;
+                }
+            }
+            ++i;
+        }
+        return fail(GraphErrorKind::Syntax, i, "unterminated object");
+    }
+
+protected:
+    std::string_view text_;
+    std::size_t pos_ = 0;
+    GraphError& error_;
+};
+
+struct RawNode {
+    Node node;
+    bool has_id = false;
+    bool has_type = false;
+    bool has_weight = false;
+    bool has_grid = false;
+    bool has_block = false;
+    bool has_shared_bytes = false;
+    bool has_alloc_bytes = false;
+    bool has_mem_ptr = false;
+    bool has_child = false;
+    std::size_t object_pos = 0;
+    std::size_t id_pos = 0;
+    std::size_t weight_pos = 0;
+    std::size_t grid_pos = 0;
+    std::size_t block_pos = 0;
+    std::size_t alloc_pos = 0;
+    std::size_t mem_ptr_pos = 0;
+    std::size_t child_pos = 0;
+};
+
+struct RawGraph {
+    std::vector<RawNode> nodes;
+    std::vector<std::pair<int, int>> edges;
+    std::vector<std::size_t> edge_positions;
+    std::vector<RawGraph> children;
+    SourceKind source = SourceKind::File;
+    WeightKind weight_kind = WeightKind::Levels;
+    std::size_t object_pos = 0;
+};
+
+class Parser : public Scanner {
+public:
+    Parser(std::string_view text, GraphError& error) : Scanner(text, error) {}
+
+    [[nodiscard]] bool parse(Graph& out) {
+        skip_whitespace();
+        RawGraph root;
+        if (!parse_graph_object(root, 1, true)) {
+            return false;
+        }
+        skip_whitespace();
+        if (pos_ != text_.size()) {
+            return fail(GraphErrorKind::Trailing, pos_, "trailing bytes after the document");
+        }
+        Graph graph;
+        if (!finish(root, root.weight_kind, root.source, true, graph)) {
+            return false;
+        }
+        out = std::move(graph);
+        return true;
+    }
+
+private:
+    [[nodiscard]] bool parse_u32(std::uint32_t& value) {
+        const std::size_t start = pos_;
+        std::uint64_t wide = 0;
+        if (!parse_uint64(wide)) {
+            return false;
+        }
+        if (wide > static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
+            return fail(GraphErrorKind::BadNumber, start, "value exceeds 32 bits");
+        }
+        value = static_cast<std::uint32_t>(wide);
+        return true;
+    }
+
+    [[nodiscard]] bool parse_dims(std::array<std::uint32_t, 3>& dims) {
+        if (!expect('[')) {
+            return false;
+        }
+        for (std::size_t i = 0; i < dims.size(); ++i) {
+            skip_whitespace();
+            if (!parse_u32(dims[i])) {
+                return false;
+            }
+            skip_whitespace();
+            if (i + 1 < dims.size() && !expect(',')) {
+                return false;
+            }
+        }
+        return expect(']');
+    }
+
+    [[nodiscard]] bool parse_mem_ptr(std::uint64_t& value) {
+        const std::size_t start = pos_;
+        std::string token;
+        if (!parse_string(token)) {
+            return false;
+        }
+        if (token.size() < 3 || token[0] != '0' || token[1] != 'x') {
+            return fail(GraphErrorKind::BadNumber, start,
+                        "mem_ptr must be 0x followed by hex digits");
+        }
+        std::uint64_t result = 0;
+        for (std::size_t i = 2; i < token.size(); ++i) {
+            const char ch = token[i];
+            int digit = -1;
+            if (ch >= '0' && ch <= '9') {
+                digit = ch - '0';
+            } else if (ch >= 'a' && ch <= 'f') {
+                digit = ch - 'a' + 10;
+            } else {
+                return fail(GraphErrorKind::BadNumber, start,
+                            "mem_ptr must be lowercase hexadecimal");
+            }
+            if (result > (std::numeric_limits<std::uint64_t>::max() -
+                          static_cast<std::uint64_t>(digit)) /
+                             16) {
+                return fail(GraphErrorKind::BadNumber, start, "mem_ptr exceeds 64 bits");
+            }
+            result = result * 16 + static_cast<std::uint64_t>(digit);
+        }
+        value = result;
+        return true;
     }
 
     [[nodiscard]] bool parse_graph_object(RawGraph& raw, std::size_t depth, bool root) {
@@ -1024,10 +1088,6 @@ private:
         out = std::move(graph);
         return true;
     }
-
-    std::string_view text_;
-    std::size_t pos_ = 0;
-    GraphError& error_;
 };
 
 }  // namespace detail

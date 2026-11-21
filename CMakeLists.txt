@@ -121,6 +121,24 @@ if(GRAPHLINT_WITH_CUDA)
 endif()
 
 # ---------------------------------------------------------------------------
+# CLIs (host-only: they read JSON; CUDA only fills the environment, never the core)
+# ---------------------------------------------------------------------------
+add_executable(graphlint_report tools/report.cpp tools/report_core.hpp)
+target_link_libraries(graphlint_report PRIVATE graphlint::graphlint)
+target_include_directories(graphlint_report PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+graphlint_apply_warnings(graphlint_report)
+
+add_executable(graphlint_gate tools/gate.cpp)
+target_link_libraries(graphlint_gate PRIVATE graphlint::graphlint)
+graphlint_apply_warnings(graphlint_gate)
+
+# Only the report CLI writes `environment`: the gate reads it out of the two documents.
+if(GRAPHLINT_WITH_CUDA)
+    target_compile_definitions(graphlint_report PRIVATE GRAPHLINT_CLI_WITH_CUDA=1)
+    target_link_libraries(graphlint_report PRIVATE graphlint_cuda)
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests (host-only: no CUDA toolkit, no GPU, no nvcc)
 # ---------------------------------------------------------------------------
 if(GRAPHLINT_BUILD_TESTS)
@@ -239,6 +257,133 @@ if(GRAPHLINT_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_artifacts.cmake)
     set_tests_properties(artifacts_locale PROPERTIES
         ENVIRONMENT "LC_ALL=de_DE.UTF-8;TZ=Asia/Tokyo")
+
+    graphlint_add_test(graphlint_test_report tests/test_report.cpp)
+    # The pinned report document, the fixtures the gate reads, and the committed
+    # artifacts the summary CLI is run over.
+    target_compile_definitions(graphlint_test_report PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports"
+        GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
+    # The CLI body lives in tools/report_core.hpp, outside the installed header set.
+    target_include_directories(graphlint_test_report PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+    graphlint_add_test(graphlint_test_gate tests/test_gate.cpp)
+    # The four verdicts, the eight metrics and the threshold boundaries, on documents built in memory.
+    target_compile_definitions(graphlint_test_gate PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports")
+    set(graphlint_report_dir "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports")
+
+    # Exit codes are the contract of docs/report.md section 4, so the assertions are numbers
+    # and the stderr line that names the failed comparison, never stdout alone.
+    function(graphlint_add_gate_case name expected args stderr)
+        add_test(NAME ${name} COMMAND ${CMAKE_COMMAND}
+            -DTOOL=$<TARGET_FILE:graphlint_gate>
+            -DEXPECTED=${expected}
+            "-DARGS=${args}"
+            "-DEXPECT_STDERR=${stderr}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+    endfunction()
+
+    graphlint_add_gate_case(gate_pass_same_document 0
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/baseline.json"
+        pass)
+    graphlint_add_gate_case(gate_threshold_exceeded 1
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/depth_plus_one.json"
+        "depth grew 1 > 0")
+    graphlint_add_gate_case(gate_real_regression 1
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/host_node.json"
+        "findings_severe grew 1 > 0")
+    graphlint_add_gate_case(gate_other_source 2
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/other_source.json"
+        "different source kind: built vs capture")
+    graphlint_add_gate_case(gate_weights_incompatible 2
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/ns_weights.json"
+        "weight_kind ns")
+    # A document is emitted even when the input cannot be read, so the --json file is opened,
+    # not assumed.
+    function(graphlint_add_gate_json_case name expected args stderr json_path json_contains)
+        add_test(NAME ${name} COMMAND ${CMAKE_COMMAND}
+            -DTOOL=$<TARGET_FILE:graphlint_gate>
+            -DEXPECTED=${expected}
+            "-DARGS=${args}"
+            "-DEXPECT_STDERR=${stderr}"
+            "-DEXPECT_JSON=${json_path}"
+            "-DEXPECT_JSON_CONTAINS=${json_contains}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+    endfunction()
+
+    graphlint_add_gate_json_case(gate_unreadable_input 2
+        "--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/truncated.json;--json;${CMAKE_CURRENT_BINARY_DIR}/unreadable-gate.json"
+        "[0-9]+:[0-9]+"
+        ${CMAKE_CURRENT_BINARY_DIR}/unreadable-gate.json
+        "\"verdict\": \"suspect\"")
+    graphlint_add_gate_json_case(gate_missing_input_writes_suspect 2
+        "--quiet;--baseline;${CMAKE_CURRENT_BINARY_DIR}/does-not-exist.json;--current;${graphlint_report_dir}/baseline.json;--json;${CMAKE_CURRENT_BINARY_DIR}/missing-input.json"
+        "graphlint_gate: suspect"
+        ${CMAKE_CURRENT_BINARY_DIR}/missing-input.json
+        "\"verdict\": \"suspect\"")
+
+    # --quiet silences the document, never the verdict line.
+    add_test(NAME gate_quiet_keeps_the_verdict COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_gate>
+        -DEXPECTED=0
+        "-DARGS=--quiet;--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/baseline.json"
+        "-DEXPECT_STDERR=graphlint_gate: pass"
+        -DEXPECT_STDOUT_EMPTY=ON
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    # A --json path that cannot be opened is exit 2, and the verdict sentence still reaches
+    # stderr: the line is the contract's fixed one, not a success-only courtesy.
+    add_test(NAME gate_json_unwritable_keeps_the_verdict COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_gate>
+        -DEXPECTED=2
+        "-DARGS=--quiet;--baseline;${graphlint_report_dir}/baseline.json;--current;${graphlint_report_dir}/baseline.json;--json;${CMAKE_CURRENT_BINARY_DIR}/no-such-directory/gate.json"
+        "-DEXPECT_STDERR=graphlint_gate: pass"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    add_test(NAME report_summary COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=0
+        "-DARGS=--format;summary;${CMAKE_CURRENT_SOURCE_DIR}/graphs/built.json"
+        "-DEXPECT_STDERR=^$"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    # Usage and input failures the contract names: a cap below one and a report where a graph
+    # belongs both end at 2, with the detail on stderr.
+    add_test(NAME report_max_nodes_zero COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=--max-nodes;0;${CMAKE_CURRENT_SOURCE_DIR}/graphs/built.json"
+        "-DEXPECT_STDERR=--max-nodes must be >= 1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+    add_test(NAME report_rejects_report_json COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/reports/baseline.json"
+        "-DEXPECT_STDERR=unknown key \"analysis\""
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    # --out leaves stdout empty and writes the same bytes; the emitters also reproduce the
+    # committed graphs/*.dot and *.mmd, so the CLI stays tied to the files the README shows.
+    function(graphlint_add_report_out_case name graph format expected_file)
+        add_test(NAME ${name} COMMAND ${CMAKE_COMMAND}
+            -DTOOL=$<TARGET_FILE:graphlint_report>
+            -DGRAPH=${CMAKE_CURRENT_SOURCE_DIR}/${graph}
+            -DFORMAT=${format}
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}.out
+            "-DEXPECTED_FILE=${expected_file}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/report_out.cmake)
+    endfunction()
+
+    graphlint_add_report_out_case(report_json_out graphs/built.json json "")
+    graphlint_add_report_out_case(
+        report_dot_matches_artifact graphs/pingpong.json dot
+        ${CMAKE_CURRENT_SOURCE_DIR}/graphs/pingpong.dot)
+    graphlint_add_report_out_case(
+        report_mermaid_matches_artifact graphs/pingpong.json mermaid
+        ${CMAKE_CURRENT_SOURCE_DIR}/graphs/pingpong.mmd)
 
     # -----------------------------------------------------------------------
     # demo_check reads graphs/*.json with no CUDA at all: it is registered here,

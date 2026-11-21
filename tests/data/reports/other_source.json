@@ -1,0 +1,46 @@
+{
+  "analysis": {
+    "depth": 4,
+    "distinct_edges": 3,
+    "edges_minimal": [
+      [0, 1],
+      [1, 2],
+      [2, 3]
+    ],
+    "edges_redundant": [],
+    "width": [1, 1, 1, 1]
+  },
+  "applicability": {
+    "applicable": [
+      {"reason": "graph is a DAG", "rule": "dag-check"},
+      {"reason": "depth and node count are known", "rule": "launch-shaped"},
+      {"reason": "the reduction is exact on a DAG", "rule": "redundant-edge"},
+      {"reason": "node types are readable", "rule": "sync-node"},
+      {"reason": "successors and reachability are readable", "rule": "pointless-fork"}
+    ],
+    "not_applicable": [
+      {"reason": "no kernel name", "rule": "duplicate-launch"},
+      {"reason": "no mem_alloc/mem_free node", "rule": "mem-lifecycle"}
+    ]
+  },
+  "environment": {"cuda_runtime": 0, "device": ""},
+  "findings": [],
+  "graph": {
+    "children": [],
+    "edges": [
+      [0, 1],
+      [1, 2],
+      [2, 3]
+    ],
+    "nodes": [
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 0, "type": "kernel"},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 1, "type": "kernel"},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 2, "type": "kernel"},
+      {"block": [1, 1, 1], "grid": [1, 1, 1], "id": 3, "type": "kernel"}
+    ],
+    "schema_version": 1,
+    "source": {"kind": "capture"},
+    "weight_kind": "levels"
+  },
+  "schema_version": 1
+}
