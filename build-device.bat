@@ -12,11 +12,13 @@ rem the host code is also compiled by /W4 /WX through -Xcompiler (CMakeLists.txt
 rem
 rem Two options on purpose: GRAPHLINT_WITH_CUDA builds src/cuda_source.cpp with
 rem cudart only; GRAPHLINT_BUILD_DEVICE_TESTS adds nvcc, the demo and the GPU suite.
-rem GRAPHLINT_BUILD_BENCH adds nvcc, tools/bench.cu and cuda-timer (FetchContent).
+rem GRAPHLINT_BUILD_BENCH adds nvcc, tools/bench.cu, tools/weights.cu and cuda-timer
+rem (FetchContent).
 rem
 rem Usage:  build-device.bat <configure|build|demo|bench|test|clean> [build-dir]
 rem    demo        run demo_graph, which rewrites graphs/*.json in the source tree
-rem    bench       configure with the benchmark on, build it, write docs/bench/bench.json
+rem    bench       configure with the benchmark on, build bench + weights, write
+rem                docs/bench/bench.json, measured.json and weights.json
 rem ---------------------------------------------------------------------------
 setlocal
 if "%~1"=="" goto usage
@@ -53,11 +55,14 @@ rem was compiled against, the same reason CMAKE_CUDA_COMPILER is pinned.
 set "PATH=%CUDA_HOME%\bin;%PATH%"
 call :configure_cmake
 if errorlevel 1 exit /b 1
-cmake --build "%BUILD%" --target bench
+cmake --build "%BUILD%" --target bench weights
 if errorlevel 1 exit /b 1
 rem From the repo root: the default --out path is relative to the caller's cwd.
 cd /d "%~dp0"
 "%BUILD%\bench.exe"
+if errorlevel 1 exit /b 1
+rem The producer of docs/bench/measured.json and docs/bench/weights.json.
+"%BUILD%\weights.exe"
 exit /b %errorlevel%
 
 :configure_cmake

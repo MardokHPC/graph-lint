@@ -169,6 +169,13 @@ if(GRAPHLINT_BUILD_BENCH)
     add_executable(bench tools/bench.cu)
     target_link_libraries(bench PRIVATE graphlint_cuda CUDA::cudart graphlint_bench_timer)
     graphlint_apply_cuda_warnings(bench)
+
+    # The producer of docs/bench/weights.json: one node at a time on the exec. dump_graph
+    # validates the model in this build, so a graph the report would refuse never reaches disk.
+    add_executable(weights tools/weights.cu)
+    target_link_libraries(weights PRIVATE graphlint_cuda CUDA::cudart graphlint_bench_timer)
+    target_compile_definitions(weights PRIVATE GRAPHLINT_ENABLE_ASSERTS=1)
+    graphlint_apply_cuda_warnings(weights)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -322,6 +329,15 @@ if(GRAPHLINT_BUILD_TESTS)
     target_compile_definitions(graphlint_test_bench PRIVATE
         GRAPHLINT_BENCH_JSON="${CMAKE_CURRENT_SOURCE_DIR}/docs/bench/bench.json")
     set_tests_properties(graphlint_test_bench PROPERTIES SKIP_RETURN_CODE 77)
+
+    # The closed loop, read on a runner with no GPU: the measured graph and the table bound to
+    # it by fingerprint, through the same loader and critical path the report uses. Opt-in too.
+    graphlint_add_test(graphlint_test_weights_artifact tests/test_weights_artifact.cpp)
+    target_compile_definitions(graphlint_test_weights_artifact PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_MEASURED_JSON="${CMAKE_CURRENT_SOURCE_DIR}/docs/bench/measured.json"
+        GRAPHLINT_WEIGHTS_JSON="${CMAKE_CURRENT_SOURCE_DIR}/docs/bench/weights.json")
+    set_tests_properties(graphlint_test_weights_artifact PROPERTIES SKIP_RETURN_CODE 77)
 
     # Exit codes are the contract of docs/report.md section 4, so the assertions are numbers
     # and the stderr line that names the failed comparison, never stdout alone.

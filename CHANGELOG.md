@@ -47,6 +47,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   timed for instantiate and launch with zero points and a discarded warm-up sweep. The measured
   table, the command and the caveats are `docs/bench.md`; the raw document is
   `docs/bench/bench.json`.
+- `tools/weights.cu`, same opt-in target: it measures one node at a time with
+  `cudaGraphNodeSetEnabled`, subtracts the all-disabled floor, and writes `docs/bench/weights.json`
+  with the graph fingerprint, plus `docs/bench/measured.json`. `graphlint_report --weights` on the
+  pair turns the critical path into nanoseconds. `canonicalize` can now report its permutation and
+  `from_cuda` the handle behind each canonical id.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
   three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.

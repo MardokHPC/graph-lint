@@ -12,7 +12,7 @@ choice of this tool, not a defect waiting for a fix.
 | capture or hand-built | no flag, field or query says how the handle was made, so `source.kind` is the caller's declaration (the `SourceKind` argument), never a deduction. |
 | mutations on the exec | `cudaGraphExec*NodeSetParams` and `cudaGraphNodeSetEnabled` change the instantiated graph; the template keeps its own shape, and the template is what we read. |
 | the effect of instantiate | `cudaGraphInstantiate` compiles the template into an executable graph: flags, node priorities and the device-launch form live there, not on the template. |
-| durations | a level is a dependency, not a time: two graphs of depth 10 can take 10 µs and 10 ms. A weight in ns exists only in a document that carries one. |
+| durations | a level is a dependency, not a time: two graphs of depth 10 can take 10 µs and 10 ms. A weight in ns exists only in a document that carries one, and a measured one is a lower bound of its node: `tools/weights.cu` subtracts the all-disabled exec's floor, which on this machine sits ~8 µs above what a one-node launch pays, so the smallest node carries the largest error. |
 | host-side allocations | a plain `cudaMalloc` before capture leaves no node. Only the `cudaMallocAsync` / `cudaGraphAddMemAllocNode` pair appears as `mem_alloc`/`mem_free`. |
 
 ## Dropped by choice

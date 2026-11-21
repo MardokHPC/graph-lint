@@ -366,8 +366,12 @@ struct SortKeyGreater {
 
 // Kahn over a min-heap of (structural key, api index). The ready set is structural,
 // so the heap only reads api_index when two nodes are structurally identical (F2).
-inline void canonicalize(Graph& graph) {
+// `new_to_old` receives the inverse of the sort, for root-only id-to-handle maps.
+inline void canonicalize(Graph& graph, std::vector<int>* new_to_old = nullptr) {
     const std::size_t n = graph.nodes.size();
+    if (new_to_old != nullptr) {
+        new_to_old->clear();
+    }
     std::vector<std::uint32_t> in_degree(n, 0);
     std::vector<std::uint32_t> out_degree(n, 0);
     std::vector<std::vector<std::size_t>> predecessors(n);
@@ -448,6 +452,15 @@ inline void canonicalize(Graph& graph) {
     GRAPHLINT_ASSERT(order.size() == n);
     if (order.size() != n) {
         return;
+    }
+
+    // Only after the sort is known to be total: a map half filled by a failed pass would name
+    // handles for ids that do not exist.
+    if (new_to_old != nullptr) {
+        new_to_old->reserve(order.size());
+        for (const std::size_t old : order) {
+            new_to_old->push_back(static_cast<int>(old));
+        }
     }
 
     std::vector<int> new_id(n, -1);

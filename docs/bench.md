@@ -48,9 +48,56 @@ document holds nanoseconds, integers only.
 3. **`instantiate` is a host call**, timed with the host clock around `cudaGraphInstantiate`. An
    event pair cannot measure it: on an idle stream WDDM can batch both records and the gap collapses
    toward zero, which is how a 32-node graph produced sub-microsecond samples. An empty graph costs
-   ~1.0 us and the net column removes it. None of this is driver compile time.
+   ~1.0 us and the net column removes it. None of this is driver compile time. And a subtracted
+   floor is a measurement too, one that can overshoot: in the weights run below the all-disabled
+   floor sits ~8 us above what a one-node launch pays, so a net column is a lower bound of what it
+   nets, not an exact net.
 
 One GPU, one driver, one toolkit: nothing here is a claim outside this machine. The four committed
 graph documents, their environment and the demo that wrote them are in
 [`graphs/REPORT.md`](../graphs/REPORT.md); what a level, a width and a reduction mean is in
 [`topology.md`](topology.md).
+
+## From topology to time
+
+`tools/weights.cu` closes the loop the rest of this page opens: it measures one node at a time
+and writes the two artifacts `graphlint_report --weights` consumes.
+
+```bat
+build-device.bat bench
+```
+
+It builds a chain of eight `work(iters)` kernels — a dependent integer loop whose length grows
+with the position, 55 000 steps per position at ~0.7 ns each, because a noop is under the
+~9 µs a launch of this exec costs with every node disabled. Then: read the chain back through
+`from_cuda`, which returns the canonical model *and* the id → handle map; instantiate once; for
+every canonical id disable all nodes but that one on the exec with `cudaGraphNodeSetEnabled`.
+The nodes are created backwards, so the API order is the reverse of the chain: an unpermuted
+map would hand id 0 the last node's load, and the tool refuses to write a table whose weights do
+not grow with the id. The clock is brought to a regime by 600 full-chain launches first — a
+per-node loop read about a third slower per iteration on the first ids than on the last, which
+is why the passes are round-robin — then 3 passes × 7 batches × 20 launches, and
+`ns = max(0, median − zero_point)`, the zero point being the same pass with every node disabled.
+A node clamped to 0 is counted on stdout: the weights file has no field to say it, and `ns == 0`
+stays legal.
+
+`docs/bench/weights.json` is the table, `docs/bench/measured.json` the graph it binds to by
+fingerprint:
+
+```
+$ graphlint_report docs/bench/measured.json --weights docs/bench/weights.json --format summary
+source: built
+weight_kind: ns
+...
+critical_path: 0 1 2 3 4 5 6 7 (1496588 ns, 1.496 ms)
+```
+
+The line is the sum of the eight weights over the longest chain: on this card one execution of
+this graph cannot be shorter, and every node is on that chain, so no single kernel explains the
+number (`weights.json` has the eight). It is not the frame time, and a weight is a lower bound of
+its node: the zero point is the floor of an exec with every node disabled, and on this machine it
+sits ~8 µs above the floor a one-node launch actually pays, so every weight is low by that much —
+~19% of id 0, ~4% of the 1.5 ms sum, the error largest on the smallest node. Each node also runs
+alone, with the whole card and nothing contending, so the sum is a lower bound of a serial
+execution and never a measured duration. Re-measure on another driver and the table changes while
+the fingerprint does not; the file cannot tell.

@@ -140,6 +140,78 @@ TEST_F(CudaSource, ChainOfEightIsCanonical) {
     EXPECT_TRUE(parsed == model);
 }
 
+// The handle map is the whole point of tools/weights.cu: id i has to name the node the model
+// calls i. Created backwards and chained afterwards, so the API order is the reverse of the
+// chain and a map that skipped the permutation would hand id 0 the handle of the last node.
+TEST_F(CudaSource, HandlesFollowTheCanonicalIds) {
+    std::vector<cudaGraphNode_t> built(8, nullptr);
+    for (int j = 7; j >= 0; --j) {
+        GL_CUDA(add_kernel(graph_, {}, dim3(static_cast<unsigned int>(j) + 1, 1, 1),
+                           dim3(64, 1, 1), built[static_cast<std::size_t>(j)]));
+    }
+    for (int j = 0; j + 1 < 8; ++j) {
+        const cudaGraphNode_t from = built[static_cast<std::size_t>(j)];
+        const cudaGraphNode_t to = built[static_cast<std::size_t>(j) + 1];
+        GL_CUDA(cudaGraphAddDependencies(graph_, &from, &to, 1));
+    }
+
+    Graph model;
+    std::string error;
+    std::vector<cudaGraphNode_t> handles;
+    ASSERT_TRUE(from_cuda(graph_, SourceKind::Built, model, error, &handles)) << error;
+
+    ASSERT_EQ(model.nodes.size(), 8u);
+    ASSERT_EQ(handles.size(), 8u);
+    for (int id = 0; id < 8; ++id) {
+        const std::size_t at = static_cast<std::size_t>(id);
+        EXPECT_EQ(model.nodes[at].grid, x_only(static_cast<std::uint32_t>(id) + 1));
+        ASSERT_NE(handles[at], nullptr);
+        cudaKernelNodeParams params{};
+        GL_CUDA(cudaGraphKernelNodeGetParams(handles[at], &params));
+        EXPECT_EQ(params.gridDim.x, static_cast<unsigned int>(id) + 1)
+            << "handle " << id << " is not the node the model calls " << id;
+    }
+
+    // Without the out-parameter the model is the same one: the map is opt-in, not a second path.
+    Graph unmapped;
+    ASSERT_TRUE(from_cuda(graph_, SourceKind::Built, unmapped, error, nullptr)) << error;
+    EXPECT_TRUE(unmapped == model);
+}
+
+// Two middles identical in every field canonicalize reads: their ids are one tie class, and
+// the map must still be a bijection onto distinct handles.
+TEST_F(CudaSource, SymmetricNodesGetDistinctHandles) {
+    cudaGraphNode_t root = nullptr;
+    cudaGraphNode_t left = nullptr;
+    cudaGraphNode_t right = nullptr;
+    cudaGraphNode_t join = nullptr;
+    GL_CUDA(add_kernel(graph_, {}, dim3(1, 1, 1), dim3(32, 1, 1), root));
+    GL_CUDA(add_kernel(graph_, {root}, dim3(2, 2, 1), dim3(32, 1, 1), left));
+    GL_CUDA(add_kernel(graph_, {root}, dim3(2, 2, 1), dim3(32, 1, 1), right));
+    GL_CUDA(add_kernel(graph_, {left, right}, dim3(4, 1, 1), dim3(32, 1, 1), join));
+
+    Graph model;
+    std::string error;
+    std::vector<cudaGraphNode_t> handles;
+    ASSERT_TRUE(from_cuda(graph_, SourceKind::Built, model, error, &handles)) << error;
+
+    ASSERT_EQ(handles.size(), 4u);
+    for (std::size_t i = 0; i < handles.size(); ++i) {
+        ASSERT_NE(handles[i], nullptr);
+        for (std::size_t j = i + 1; j < handles.size(); ++j) {
+            EXPECT_NE(handles[i], handles[j]) << "ids " << i << " and " << j << " share a handle";
+        }
+        cudaKernelNodeParams params{};
+        GL_CUDA(cudaGraphKernelNodeGetParams(handles[i], &params));
+        EXPECT_EQ(params.gridDim.x, model.nodes[i].grid[0]) << "id " << i;
+        EXPECT_EQ(params.gridDim.y, model.nodes[i].grid[1]) << "id " << i;
+    }
+    // The two middles are the same node to the model, and the ids below 3 are the two of them.
+    const std::array<std::uint32_t, 3> middle = {2, 2, 1};
+    EXPECT_EQ(model.nodes[1].grid, middle);
+    EXPECT_EQ(model.nodes[2].grid, middle);
+}
+
 TEST_F(CudaSource, MemAllocAndFreeAreReadBack) {
     int pools = 0;
     GL_CUDA(cudaDeviceGetAttribute(&pools, cudaDevAttrMemoryPoolsSupported, 0));
@@ -240,6 +312,22 @@ TEST(CudaDepth, MatchesTheDocumentLimit) {
     EXPECT_FALSE(deeper);
     EXPECT_NE(error.find("cudaGraphChildGraphNodeGetGraph"), std::string::npos) << error;
     EXPECT_NE(error.find("deeper"), std::string::npos) << error;
+}
+
+TEST(CudaDepth, FailedReadLeavesTheHandleMapAlone) {
+    // A reader that fails halfway must not leave a vector naming handles for a model the
+    // caller never received: the sentinel has to survive.
+    cudaGraph_t too_deep = nullptr;
+    GL_CUDA(nested_graph(k_max_graph_depth, too_deep));
+    Graph rejected;
+    std::string error;
+    std::vector<cudaGraphNode_t> handles(2, reinterpret_cast<cudaGraphNode_t>(0x1));
+    const bool deeper = from_cuda(too_deep, SourceKind::Built, rejected, error, &handles);
+    GL_CUDA(cudaGraphDestroy(too_deep));
+    EXPECT_FALSE(deeper);
+    ASSERT_EQ(handles.size(), 2u);
+    EXPECT_EQ(handles[0], reinterpret_cast<cudaGraphNode_t>(0x1));
+    EXPECT_EQ(handles[1], reinterpret_cast<cudaGraphNode_t>(0x1));
 }
 
 TEST(CudaCapture, MatchesTheCommittedCounts) {

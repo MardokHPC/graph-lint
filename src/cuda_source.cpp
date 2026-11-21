@@ -28,7 +28,7 @@ namespace {
 }
 
 [[nodiscard]] bool read_graph(cudaGraph_t graph, SourceKind source, Graph& out, int depth,
-                              std::string& error);
+                              std::string& error, std::vector<cudaGraphNode_t>* api_handles);
 
 [[nodiscard]] bool fill_kernel(cudaGraphNode_t handle, Node& node, std::string& error) {
     cudaKernelNodeParams params{};
@@ -70,7 +70,7 @@ namespace {
 }
 
 [[nodiscard]] bool read_graph(cudaGraph_t graph, SourceKind source, Graph& out, int depth,
-                              std::string& error) {
+                              std::string& error, std::vector<cudaGraphNode_t>* api_handles) {
     if (depth > k_max_graph_depth) {
         error = "cudaGraphChildGraphNodeGetGraph: child graphs nested deeper than " +
                 std::to_string(k_max_graph_depth) + " levels";
@@ -151,7 +151,7 @@ namespace {
                 }
                 out.children.emplace_back();
                 node.child = static_cast<int>(out.children.size()) - 1;
-                if (!read_graph(child, source, out.children.back(), depth + 1, error)) {
+                if (!read_graph(child, source, out.children.back(), depth + 1, error, nullptr)) {
                     return false;
                 }
                 break;
@@ -203,24 +203,43 @@ namespace {
     // A handle carries no timings and no provenance: levels, and the caller's kind.
     out.weight_kind = WeightKind::Levels;
     out.source = source;
+    // API order, held only long enough for from_cuda to permute it with the ids.
+    if (api_handles != nullptr) {
+        *api_handles = std::move(handles);
+    }
     return true;
 }
 
 }  // namespace
 
-bool from_cuda(const cudaGraph_t& graph, SourceKind source, Graph& out, std::string& error) {
+bool from_cuda(const cudaGraph_t& graph, SourceKind source, Graph& out, std::string& error,
+               std::vector<cudaGraphNode_t>* handles_by_id) {
     Graph scratch;
+    std::vector<cudaGraphNode_t> api_handles;
+    std::vector<int> new_to_old;
     error.clear();
-    if (!read_graph(graph, source, scratch, 1, error)) {
+    if (!read_graph(graph, source, scratch, 1, error, &api_handles)) {
         return false;
     }
-    canonicalize(scratch);
+    canonicalize(scratch, &new_to_old);
     GraphError problem;
     if (!validate(scratch, problem)) {
         error = "validate: " + problem.detail;
         return false;
     }
+    // Built aside and swapped in at the end: a failure above leaves the caller's vector alone
+    // instead of naming handles for a model that was never returned.
+    std::vector<cudaGraphNode_t> permuted;
+    if (handles_by_id != nullptr) {
+        permuted.resize(new_to_old.size());
+        for (std::size_t id = 0; id < new_to_old.size(); ++id) {
+            permuted[id] = api_handles[static_cast<std::size_t>(new_to_old[id])];
+        }
+    }
     out = std::move(scratch);
+    if (handles_by_id != nullptr) {
+        *handles_by_id = std::move(permuted);
+    }
     return true;
 }
 

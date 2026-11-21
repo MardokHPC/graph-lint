@@ -251,6 +251,100 @@ TEST(Graph, CanonicalizeAssignsDenseTopologicalIds) {
     }
 }
 
+// A reversed chain is the smallest graph whose canonical order is not the input order: the
+// permutation has to name, for every new id, the index that node came from.
+TEST(Graph, CanonicalizeReportsThePermutationItApplied) {
+    graphlint::Graph graph = chain(5);
+    std::reverse(graph.nodes.begin(), graph.nodes.end());
+    for (std::pair<int, int>& edge : graph.edges) {
+        edge = {4 - edge.first, 4 - edge.second};
+    }
+    std::vector<std::string> before;
+    before.reserve(graph.nodes.size());
+    for (const graphlint::Node& node : graph.nodes) {
+        before.push_back(node.name);
+    }
+
+    std::vector<int> new_to_old;
+    graphlint::canonicalize(graph, &new_to_old);
+
+    ASSERT_EQ(new_to_old.size(), graph.nodes.size());
+    // The chain reverses: the source was the last one listed.
+    EXPECT_EQ(new_to_old, (std::vector<int>{4, 3, 2, 1, 0}));
+    std::vector<int> sorted = new_to_old;
+    std::sort(sorted.begin(), sorted.end());
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(sorted[static_cast<std::size_t>(i)], i) << "not a permutation";
+        EXPECT_EQ(graph.nodes[static_cast<std::size_t>(i)].name,
+                  before[static_cast<std::size_t>(new_to_old[static_cast<std::size_t>(i)])]);
+    }
+}
+
+// The map is opt-in: a caller that does not ask for it gets exactly the bytes it got before.
+TEST(Graph, CanonicalizeWithoutAMapKeepsTheBytes) {
+    graphlint::Graph plain = asymmetric_graph();
+    graphlint::canonicalize(plain);
+    graphlint::Graph mapped = asymmetric_graph();
+    std::vector<int> new_to_old;
+    graphlint::canonicalize(mapped, &new_to_old);
+
+    EXPECT_EQ(graphlint::dump_graph(plain), graphlint::dump_graph(mapped));
+    // This fixture is already in canonical order, so here the permutation is the identity and
+    // the two calls cannot differ for any reason other than the new out-parameter.
+    EXPECT_EQ(new_to_old, (std::vector<int>{0, 1, 2, 3, 4, 5}));
+}
+
+// Two identical kernels are one tie class: the permutation is then the API index's residue,
+// which is exactly why it has to be returned instead of guessed — it must still be total.
+TEST(Graph, CanonicalizeMapIsTotalOnSymmetricNodes) {
+    graphlint::Graph graph;
+    graph.nodes.push_back(make_kernel(0, "root"));
+    graph.nodes.push_back(make_kernel(1, ""));
+    graph.nodes.push_back(make_kernel(2, ""));
+    graph.nodes.push_back(make_kernel(3, "join"));
+    graph.edges = {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+
+    std::vector<int> new_to_old;
+    graphlint::canonicalize(graph, &new_to_old);
+
+    ASSERT_EQ(new_to_old.size(), 4u);
+    // The two middles may swap; root and join cannot, because only they have these degrees.
+    EXPECT_EQ(graph.nodes[static_cast<std::size_t>(new_to_old[0])].name, "root");
+    EXPECT_EQ(graph.nodes[static_cast<std::size_t>(new_to_old[3])].name, "join");
+    std::vector<int> sorted = new_to_old;
+    std::sort(sorted.begin(), sorted.end());
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(sorted[static_cast<std::size_t>(i)], i);
+    }
+    for (const std::pair<int, int>& edge : graph.edges) {
+        EXPECT_LT(edge.first, edge.second);
+    }
+}
+
+// docs/limits.md pins the tie-break to the API enumeration index; eight identical leaves that
+// become ready together are the only fixture where nothing else can order them, so a comparator
+// reversed here fails and passes every other case in this file.
+TEST(Graph, IdenticalLeavesAreOrderedByApiIndex) {
+    graphlint::Graph graph;
+    graph.nodes.push_back(make_kernel(0, "root"));
+    for (int i = 1; i <= 8; ++i) {
+        graph.nodes.push_back(make_kernel(i, ""));
+    }
+    for (int i = 1; i <= 8; ++i) {
+        graph.edges.emplace_back(0, i);
+    }
+
+    std::vector<int> new_to_old;
+    graphlint::canonicalize(graph, &new_to_old);
+
+    ASSERT_EQ(new_to_old.size(), 9u);
+    EXPECT_EQ(new_to_old[0], 0) << "the root is the only node with in-degree 0";
+    for (int id = 1; id <= 8; ++id) {
+        EXPECT_EQ(new_to_old[static_cast<std::size_t>(id)], id)
+            << "the leaves are one tie class and keep the order the API listed them in";
+    }
+}
+
 TEST(Graph, ShuffledInputGivesTheSameBytes) {
     graphlint::Graph reference = asymmetric_graph();
     graphlint::canonicalize(reference);

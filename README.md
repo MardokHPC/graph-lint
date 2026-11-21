@@ -4,12 +4,12 @@ A linter for the topology of a `cudaGraph_t`.
 
 ## Status
 
-M0 to M6 of nine milestones are closed, and the weights half of M7 is in: a `ns` table applies to the
-model, the critical path becomes the heaviest path, and the gate compares `path_ns`. The tree holds
-the graph model, the JSON contract (schema v2 for reports), the `cudaGraph_t` reader, the topology
-analysis, the rules, the DOT and Mermaid emitters, the report, the CI gate and the two command-line
-tools, the demo that produced the four artifacts in `graphs/`, and CI. The benchmark and the worked
-example are not here.
+M0 to M7 of nine milestones are closed: a `ns` weights table applies to the model, the critical
+path becomes the heaviest path, the gate compares `path_ns`, and a device tool measures one node at
+a time to produce the table. The tree holds the graph model, the JSON contract (schema v2 for
+reports), the `cudaGraph_t` reader, the topology analysis, the rules, the DOT and Mermaid emitters,
+the report, the CI gate and the two command-line tools, the demo that produced the four artifacts in
+`graphs/`, and CI. The worked example and the final topology document are not here.
 
 What works now, inside this tree: build and test the core without CUDA or a GPU, read a
 `cudaGraph_t` into `graphlint::Graph` with `from_cuda`, write or parse that model as JSON with
@@ -104,15 +104,15 @@ defect waiting for a fix.
 
 ## Quality
 
-The host suite needs no CUDA toolkit and no GPU: 220 GoogleTest cases in eleven binaries (`config` 3,
-`graph` 7, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 22, `gate` 27, `weights` 21,
-`demo_check` 5, `bench` 2). ctest runs 36 entries: those eleven, `artifacts_locale`,
+The host suite needs no CUDA toolkit and no GPU: 225 GoogleTest cases in twelve binaries (`config` 3,
+`graph` 11, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 22, `gate` 27, `weights` 21,
+`demo_check` 5, `bench` 2, `weights_artifact` 1). ctest runs 37 entries: those twelve, `artifacts_locale`,
 `report_ns_determinism`, and twenty-three process-level entries that run the two tools and assert
 exit codes, stderr and byte equality. `ctest --test-dir build-host -V` prints the per-binary counts.
 `artifacts_locale` is not a GoogleTest binary: it reruns `emit_artifacts` in a second process under
 `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
 
-The device suite is 5 cases in one ctest entry. They passed on the card named below; with no visible
+The device suite is 8 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
 `set CUDA_VISIBLE_DEVICES=-1 && ctest --test-dir build-dev --output-on-failure`.
 
@@ -141,6 +141,10 @@ builds `tools/bench.cu` against `cuda-timer` v1.2.2 and rewrites `docs/bench/ben
 with its min-max intervals, the protocol, and the three reasons a number from it cannot be quoted
 alone are in [`docs/bench.md`](docs/bench.md).
 
+The same command also measures one node at a time and writes `docs/bench/weights.json`, closing the
+loop from topology to nanoseconds: the report turns a level count into a path in time, and the
+lower bound it is and is not is stated in [`docs/bench.md`](docs/bench.md#from-topology-to-time).
+
 CI runs two jobs:
 
 | job | environment | what it does |
@@ -150,7 +154,7 @@ CI runs two jobs:
 
 The `cuda` job has no GPU: it proves the CUDA path compiles, not that it reads a handle. The
 host-only job also installs the package into a scratch prefix and builds `tests/consumer` against
-`find_package(graphlint CONFIG)`. The 5 device cases are the only ones that have touched a card.
+`find_package(graphlint CONFIG)`. The 8 device cases are the only ones that have touched a card.
 The matrix is in `.github/workflows/ci.yml`.
 
 ## Build
@@ -240,13 +244,15 @@ graph-lint/
 │   ├── test_main_device.cpp
 │   ├── test_report.cpp
 │   ├── test_rules.cpp
-│   └── test_weights.cpp
+│   ├── test_weights.cpp
+│   └── test_weights_artifact.cpp
 ├── tools/
 │   ├── bench.cu
 │   ├── emit_artifacts.cpp
 │   ├── gate.cpp
 │   ├── report.cpp
-│   └── report_core.hpp
+│   ├── report_core.hpp
+│   └── weights.cu
 ├── graphs/
 │   ├── built.dot
 │   ├── built.json
@@ -263,7 +269,9 @@ graph-lint/
 │   └── REPORT.md
 ├── docs/
 │   ├── bench/
-│   │   └── bench.json
+│   │   ├── bench.json
+│   │   ├── measured.json
+│   │   └── weights.json
 │   ├── bench.md
 │   ├── CONVENTIONS.md
 │   ├── emitters.md
