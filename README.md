@@ -1,5 +1,7 @@
 # graph-lint
 
+[![CI](https://github.com/MardokHPC/graph-lint/actions/workflows/ci.yml/badge.svg)](https://github.com/MardokHPC/graph-lint/actions/workflows/ci.yml)
+
 A linter for the topology of a `cudaGraph_t`.
 
 ## Status
