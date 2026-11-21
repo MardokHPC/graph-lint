@@ -1,0 +1,25 @@
+flowchart LR
+  n0["kernel#0×2"]
+  n2["kernel#2"]
+  n3["kernel#3"]
+  n4["kernel#4×2"]
+  n6["kernel#6×3"]
+  n9["kernel#9×3"]
+  n12["kernel#12×3"]
+  n15["kernel#15×3"]
+  n18["kernel#18×9"]
+  n0 --> n2
+  n0 --> n3
+  n2 --> n4
+  n3 --> n4
+  n4 --> n6
+  n4 --> n9
+  n4 --> n12
+  n4 --> n15
+  n6 --> n18
+  n9 --> n18
+  n12 --> n18
+  n15 --> n18
+  classDef critical stroke:#c00,stroke-width:2px
+  classDef sync fill:#f90
+  class n0,n2,n4,n6,n18 critical

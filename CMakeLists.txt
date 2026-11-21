@@ -208,6 +208,39 @@ if(GRAPHLINT_BUILD_TESTS)
         GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
 
     # -----------------------------------------------------------------------
+    # emit_artifacts is a host generator, not a product: it rewrites the DOT and
+    # Mermaid next to graphs/*.json, so the artifact tests and the README figure
+    # are regenerable on a machine with no GPU. Built only with the tests.
+    # -----------------------------------------------------------------------
+    add_executable(emit_artifacts tools/emit_artifacts.cpp)
+    target_link_libraries(emit_artifacts PRIVATE graphlint::graphlint)
+    target_compile_definitions(emit_artifacts PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs")
+    graphlint_apply_warnings(emit_artifacts)
+
+    graphlint_add_test(graphlint_test_emitters tests/test_emitters.cpp)
+    # Fixtures of the pinned examples, the four artifacts, and the repo root, where
+    # README.md holds the figure the emitter has to reproduce.
+    target_compile_definitions(graphlint_test_emitters PRIVATE
+        GRAPHLINT_ENABLE_ASSERTS=1
+        GRAPHLINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs"
+        GRAPHLINT_GRAPH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/graphs"
+        GRAPHLINT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
+    # The second process of docs/emitters.md section 6: regenerates the eight artifacts in
+    # a scratch directory under another locale and timezone, then compares them with the
+    # committed bytes one by one.
+    add_test(NAME artifacts_locale
+        COMMAND ${CMAKE_COMMAND}
+            -DEMIT=$<TARGET_FILE:emit_artifacts>
+            -DGRAPH_DIR=${CMAKE_CURRENT_SOURCE_DIR}/graphs
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/artifacts-locale
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_artifacts.cmake)
+    set_tests_properties(artifacts_locale PROPERTIES
+        ENVIRONMENT "LC_ALL=de_DE.UTF-8;TZ=Asia/Tokyo")
+
+    # -----------------------------------------------------------------------
     # demo_check reads graphs/*.json with no CUDA at all: it is registered here,
     # in the host-only block, so the free CI job validates the committed
     # artifacts. demo_graph, which regenerates them, needs a GPU (below).

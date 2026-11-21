@@ -6,11 +6,12 @@ rem Toolchain: Visual Studio 2022 BuildTools + Ninja. This is the configuration
 rem the host-only CI job runs on ubuntu-22.04 / windows-2022, and it is the one
 rem that proves the core is testable without a GPU.
 rem
-rem Usage:  build-host.bat <configure|build|test|clean> [build-dir]
+rem Usage:  build-host.bat <configure|build|test|clean|artifacts> [build-dir]
 rem    configure   configure build-host (or the given directory)
 rem    build       build it
 rem    test        ctest --output-on-failure
 rem    clean       delete the build directory (a from-scratch build + test)
+rem    artifacts   rewrite graphs/*.dot and graphs/*.mmd from graphs/*.json
 rem ---------------------------------------------------------------------------
 setlocal
 if "%~1"=="" goto usage
@@ -27,6 +28,7 @@ if /i "%~1"=="clean" goto clean
 if /i "%~1"=="configure" goto configure
 if /i "%~1"=="build" goto build
 if /i "%~1"=="test" goto test
+if /i "%~1"=="artifacts" goto artifacts
 goto usage
 
 :configure
@@ -48,6 +50,12 @@ exit /b %errorlevel%
 if exist "%BUILD%" rmdir /s /q "%BUILD%"
 exit /b 0
 
+:artifacts
+rem From the repo root, so the artifacts land in graphs/ next to their JSON.
+cd /d "%~dp0"
+"%BUILD%\emit_artifacts.exe" --out graphs
+exit /b %errorlevel%
+
 :usage
-echo Usage: %~nx0 ^<configure^|build^|test^|clean^> [build-dir]
+echo Usage: %~nx0 ^<configure^|build^|test^|clean^|artifacts^> [build-dir]
 exit /b 2

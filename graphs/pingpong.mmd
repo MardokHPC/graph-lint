@@ -1,0 +1,37 @@
+flowchart LR
+  n0["kernel#0"]
+  n1["kernel#1"]
+  n2["kernel#2"]
+  n3["kernel#3"]
+  n4["kernel#4"]
+  n5["kernel#5"]
+  n6["kernel#6"]
+  n7["kernel#7"]
+  n8["kernel#8"]
+  n9["kernel#9"]
+  n10["kernel#10"]
+  n11["kernel#11"]
+  n0 --> n1
+  n0 -.-> n2
+  n1 --> n2
+  n1 -.-> n3
+  n2 --> n3
+  n2 -.-> n4
+  n3 --> n4
+  n3 -.-> n5
+  n4 --> n5
+  n4 -.-> n6
+  n5 --> n6
+  n5 -.-> n7
+  n6 --> n7
+  n6 -.-> n8
+  n7 --> n8
+  n7 -.-> n9
+  n8 --> n9
+  n8 -.-> n10
+  n9 --> n10
+  n9 -.-> n11
+  n10 --> n11
+  classDef critical stroke:#c00,stroke-width:2px
+  classDef sync fill:#f90
+  class n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11 critical
