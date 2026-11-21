@@ -17,6 +17,8 @@ option(GRAPHLINT_BUILD_BENCH "Build the instantiate/launch benchmark (needs a GP
 # Two knobs on purpose: the library needs cudart only, nvcc and a GPU are needed
 # only to regenerate graphs/*.json and to run the suite that opens a handle.
 option(GRAPHLINT_BUILD_DEVICE_TESTS "Build tests/device: demo_graph and the GPU suite" OFF)
+# examples/three_lines.cu captures a graph: it needs nvcc, a card and the reader.
+option(GRAPHLINT_BUILD_EXAMPLES "Build examples/ (needs CUDA, nvcc and a GPU to run)" OFF)
 
 if(GRAPHLINT_BUILD_DEVICE_TESTS AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
@@ -36,6 +38,13 @@ if(GRAPHLINT_BUILD_BENCH AND NOT GRAPHLINT_WITH_CUDA)
         "GRAPHLINT_BUILD_BENCH=ON needs GRAPHLINT_WITH_CUDA=ON: tools/bench.cu reads every "
         "graph back through src/cuda_source.cpp, so the number is the graph the linter "
         "sees. Configure with -DGRAPHLINT_WITH_CUDA=ON, or turn the benchmark off.")
+endif()
+
+if(GRAPHLINT_BUILD_EXAMPLES AND NOT GRAPHLINT_WITH_CUDA)
+    message(FATAL_ERROR
+        "GRAPHLINT_BUILD_EXAMPLES=ON needs GRAPHLINT_WITH_CUDA=ON: examples/three_lines.cu "
+        "reads its captured graph through src/cuda_source.cpp. Configure with "
+        "-DGRAPHLINT_WITH_CUDA=ON, or turn the examples off.")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -176,6 +185,22 @@ if(GRAPHLINT_BUILD_BENCH)
     target_link_libraries(weights PRIVATE graphlint_cuda CUDA::cudart graphlint_bench_timer)
     target_compile_definitions(weights PRIVATE GRAPHLINT_ENABLE_ASSERTS=1)
     graphlint_apply_cuda_warnings(weights)
+endif()
+
+# ---------------------------------------------------------------------------
+# Examples (examples/three_lines.cu): nvcc for the noop kernel, cudart for the
+# capture, graphlint_cuda for the reader. The target runs on a GPU, not here.
+# ---------------------------------------------------------------------------
+if(GRAPHLINT_BUILD_EXAMPLES)
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES 75 CACHE STRING
+            "Architecture of the example kernels; override for another card")
+    endif()
+    enable_language(CUDA)
+
+    add_executable(example_three_lines examples/three_lines.cu)
+    target_link_libraries(example_three_lines PRIVATE graphlint_cuda CUDA::cudart)
+    graphlint_apply_cuda_warnings(example_three_lines)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -519,6 +544,14 @@ if(GRAPHLINT_BUILD_TESTS)
         graphlint_add_device_test(graphlint_test_cuda tests/device/test_cuda_source.cu)
         target_link_libraries(graphlint_test_cuda PRIVATE graphlint_cuda)
         target_compile_definitions(graphlint_test_cuda PRIVATE GRAPHLINT_ENABLE_ASSERTS=1)
+    endif()
+
+    # The README example, only when it was built: exit 0 is the assertion, 77 is "no card
+    # here" and ctest reports SKIPPED. --out keeps the temp file out of the source tree.
+    if(GRAPHLINT_BUILD_EXAMPLES)
+        add_test(NAME example_three_lines
+            COMMAND example_three_lines --out ${CMAKE_CURRENT_BINARY_DIR}/example_three_lines.json)
+        set_tests_properties(example_three_lines PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 

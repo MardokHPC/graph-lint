@@ -1,7 +1,7 @@
 # Rules — the contract M4 must satisfy
 
-A rule without its false-positive sentence does not ship. Numbers come from `graphs/REPORT.md`,
-`experiments/m0_graph/REPORT.md` or `HANDOFF.md`.
+A rule without its false-positive sentence does not ship. Numbers come from `graphs/REPORT.md` or
+`experiments/m0_graph/REPORT.md`.
 
 `lint` reads the root graph only: a `child_graph` node is opaque and the rules do not descend. It
 does not call `validate` (field and type invariants belong to the parser and the builder) and takes

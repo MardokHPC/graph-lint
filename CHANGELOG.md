@@ -36,6 +36,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   back, recomputes the analysis from the embedded graph and exits 0, 1 or 2: pass, regression,
   suspect. Thresholds on depth, implied edges and severe findings are absolute integers; the gate
   never trusts a declared analysis block to decide.
+- `examples/three_lines.cu`, built with `GRAPHLINT_BUILD_EXAMPLES=ON`: capture four launches on two
+  streams, read the capture back with `from_cuda`, print the topology and write the JSON the report
+  binary reads next. The binary exits 77 without a card.
 - Measured weights (`docs/weights.md`): a complete `ns` table per node, applied by
   `graphlint_report --weights`, bound to one graph by node count and a structural fingerprint that
   survives relabelling. `path` and `path_ns` appear in a report schema 2 only when the weights are

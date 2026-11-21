@@ -31,7 +31,8 @@ The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `
 rules in `rules.hpp` are what a report is built from, and `report.json` is their first consumer:
 `graphlint_report` writes it, `graphlint_gate` compares two of them and recomputes the analysis from
 the embedded graph, so a stale block cannot decide a verdict (`docs/report.md`). What each rule
-measures, and the case where it must stay silent, is `docs/rules.md`.
+measures, and the case where it must stay silent, is `docs/rules.md`; what the numbers mean — levels,
+width, the reduction, the path — is `docs/topology.md`.
 
 The drawing below is `to_mermaid` of `graphs/captured.json`: four chains of three kernels are one
 box each (`kernel#4×3`, `kernel#7×3`, `kernel#10×3`, `kernel#13×3`), the one dashed edge is a pair
@@ -66,6 +67,24 @@ flowchart LR
   classDef sync fill:#f90
   class n0,n1,n3,n4,n16 critical
 ```
+
+## Three steps
+
+`examples/three_lines.cu` captures four launches on two streams, reads the capture back through the
+same reader and prints the topology; most of the file is error handling. On this machine:
+
+```text
+graph-lint example | NVIDIA GeForce RTX 2060 SUPER | CUDA runtime 12.6
+captured: 4 nodes, 4 edges
+topology: depth 3 levels, width_max 2
+reduction: 0 of 4 edges redundant, minimal DAG 4 edges
+findings: 1
+  info   pointless-fork [0, 3]: node 0 splits into 2 single-node branches that rejoin at node 3: the fork buys nothing
+wrote %TEMP%/graphlint_three_lines.json (474 bytes)
+report: graphlint_report "%TEMP%/graphlint_three_lines.json" --format summary
+```
+
+The capture shows the rule the tool exists for: four launches become a diamond and two `cudaEventRecord`/`cudaStreamWaitEvent` pairs become edges, not nodes, so the fork is one node deep on each side. The last line is the check: the JSON it wrote is read back by the report binary with no CUDA. `build-device.bat example` builds and runs it.
 
 ## What it is not
 
@@ -180,6 +199,10 @@ toolkit of 11.4 or newer, where the mem-node and child-graph getters arrive. nvc
     build-device.bat demo
     build-device.bat test
 
+`build-device.bat example` additionally builds `examples/three_lines.cu` under
+`GRAPHLINT_BUILD_EXAMPLES=ON` and runs it; the capture path needs a card, so the binary exits 77 and
+ctest reports it SKIPPED elsewhere.
+
 On Windows the two scripts wire two toolchains that normally fight over PATH: Visual Studio 2022
 BuildTools for the host compiler, CUDA 12.6 for nvcc. `build-device.bat` sets
 `NVCC_PREPEND_FLAGS=--allow-unsupported-compiler`, because CUDA 12.6 does not know MSVC 14.44.
@@ -202,6 +225,8 @@ graph-lint/
 │   ├── report.hpp
 │   ├── rules.hpp
 │   └── weights.hpp
+├── examples/
+│   └── three_lines.cu
 ├── src/
 │   └── cuda_source.cpp
 ├── tests/
@@ -278,6 +303,7 @@ graph-lint/
 │   ├── limits.md
 │   ├── report.md
 │   ├── rules.md
+│   ├── topology.md
 │   └── weights.md
 ├── experiments/
 │   ├── m0_graph/

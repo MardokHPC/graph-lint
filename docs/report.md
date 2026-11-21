@@ -64,13 +64,13 @@ indent, keys alphabetical in every object, one node object and one edge pair per
 | `schema_version` | int | always | `2`; a `1` or a `3` is exit 2 for the gate |
 
 - `max_width` and `parallelism` are not fields: `max(width)`, `nodes / depth`, and v1 has no float;
-  `weight_kind` lives once, in `graph.weight_kind` (PLAN_M2 §4), severities and rule tokens once, in
+  `weight_kind` lives once, in `graph.weight_kind`, severities and rule tokens once, in
   `docs/rules.md`. `analysis` and `findings` cover the root, the scope `lint` has.
 - `analysis.path` and `analysis.path_ns` exist only in a `ns` report (`docs/weights.md` §4): the
   critical path as node ids and its total. A levels report has neither key.
 - A refused graph still reports: `analysis` at `0`/empty, one `dag-check` error, six `not_applicable`, and the gate makes that error exit 2.
 - No byte round trip: `analysis` and `findings` are derived and `environment` is the machine, so the
-  contract stays on `graph.json` (PLAN_M2 §1). The document is a function of `(graph, environment)`:
+  contract stays on `graph.json`. The document is a function of `(graph, environment)`:
   sorted keys, LF, no timestamp, path or float, and two processes with different `LC_ALL`/`TZ` agree.
 
 ## 2. The gate
