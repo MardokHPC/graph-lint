@@ -119,7 +119,8 @@ GCC fails with `-Werror=unused-result`, so the `(void)` cast goes in the same co
 - No rewriter: `--fix` rebuilding a `cudaGraph_t` does not exist; the reduction is safe on order, not
   on events, visibility and buffer reuse.
 - No PyTorch, Python or bindings in v1.0.
-- Only `cuda_source.hpp` may name CUDA types; `<cuda_runtime.h>` is included only in `src/cuda_source.cpp`.
+- Only `cuda_source.hpp` may name CUDA types, and it includes `<cuda_runtime_api.h>`, never
+  `<cuda_runtime.h>`.
 - No number without its artifact in `docs/bench/`.
 - No absolute paths, usernames or local plans in tracked files: the handoff document stays out,
   decisions that matter go into `docs/`.

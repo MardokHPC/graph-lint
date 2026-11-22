@@ -2,7 +2,7 @@
 
 include(CMakeFindDependencyMacro)
 
-# The reader is a STATIC library whose public header includes <cuda_runtime_api.h>:
+# The reader is a header that includes <cuda_runtime_api.h> and targets CUDA::cudart:
 # a package built with it needs the toolkit, a host-only one must not look for it.
 set(graphlint_WITH_CUDA @GRAPHLINT_WITH_CUDA@)
 if(graphlint_WITH_CUDA)

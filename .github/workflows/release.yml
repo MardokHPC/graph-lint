@@ -1,5 +1,6 @@
 # Release: on a version tag, build the host-only tools and attach them to the GitHub
-# release. The tools read a file and need no toolkit, so the package is two binaries.
+# release. Each archive is bin/ (two binaries that need no toolkit) plus
+# include/graphlint/ (the model and the header-only reader, for whoever builds against it).
 #
 # workflow_dispatch exists for a tag pushed before this file existed: it packages an
 # existing tag without moving it.
@@ -55,18 +56,27 @@ jobs:
       - name: Install into the staging tree
         run: cmake --install build --prefix stage
 
+      # The archive is the two tools plus the headers, at the same paths on both systems:
+      # bin/ on PATH and include/graphlint next to it. The headers come from the checkout,
+      # because a host-only install leaves the CUDA reader out.
       - name: Pack (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Compress-Archive -Path stage/bin/* -DestinationPath "dist/graphlint-$env:TAG-win64.zip"
+          New-Item -ItemType Directory pack/bin | Out-Null
+          New-Item -ItemType Directory pack/include/graphlint | Out-Null
+          Copy-Item stage/bin/* pack/bin
+          Copy-Item include/graphlint/*.hpp pack/include/graphlint
+          Compress-Archive -Path pack/* -DestinationPath "dist/graphlint-$env:TAG-win64.zip"
 
       - name: Pack (Linux)
         if: runner.os == 'Linux'
         run: |
-          mkdir -p dist
-          tar -C stage/bin -czf "dist/graphlint-${TAG}-linux-x64.tar.gz" graphlint_report graphlint_gate
+          mkdir -p dist pack/bin pack/include/graphlint
+          cp stage/bin/graphlint_report stage/bin/graphlint_gate pack/bin/
+          cp include/graphlint/*.hpp pack/include/graphlint/
+          tar -C pack -czf "dist/graphlint-${TAG}-linux-x64.tar.gz" bin include
 
       - name: Upload the archive
         uses: actions/upload-artifact@v4

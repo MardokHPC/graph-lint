@@ -1,19 +1,279 @@
 #pragma once
 
 #include <graphlint/graph.hpp>
+#include <graphlint/json.hpp>
 
 #include <cuda_runtime_api.h>
 
+// The map below calls getters that exist since 11.4; one guard, one job.
+#if CUDART_VERSION < 11040
+#  error "graphlint reads cudaGraph_t through APIs introduced in CUDA 11.4"
+#endif
+
+#include <cstddef>
+#include <cstdint>
+#include <fstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace graphlint {
+namespace detail {
+
+[[nodiscard]] inline std::string cuda_failure(const char* call, cudaError_t status) {
+    return std::string(call) + ": " + cudaGetErrorString(status) + " (" +
+           std::to_string(static_cast<int>(status)) + ")";
+}
+
+[[nodiscard]] inline bool cuda_fail(std::string& error, const char* call, cudaError_t status) {
+    error = cuda_failure(call, status);
+    return false;
+}
+
+[[nodiscard]] inline bool read_graph(cudaGraph_t graph, SourceKind source, Graph& out, int depth,
+                                     std::string& error, std::vector<cudaGraphNode_t>* api_handles);
+
+[[nodiscard]] inline bool fill_kernel(cudaGraphNode_t handle, Node& node, std::string& error) {
+    cudaKernelNodeParams params{};
+    const cudaError_t status = cudaGraphKernelNodeGetParams(handle, &params);
+    if (status != cudaSuccess) {
+        return cuda_fail(error, "cudaGraphKernelNodeGetParams", status);
+    }
+    // Geometry only. kernelParams is node-owned and carries no length: reading
+    // through it would be a guess about the caller's memory.
+    node.grid = {params.gridDim.x, params.gridDim.y, params.gridDim.z};
+    node.block = {params.blockDim.x, params.blockDim.y, params.blockDim.z};
+    node.shared_bytes = params.sharedMemBytes;
+    return true;
+}
+
+[[nodiscard]] inline bool fill_mem_alloc(cudaGraphNode_t handle, Node& node, std::string& error) {
+    cudaMemAllocNodeParams params{};
+    const cudaError_t status = cudaGraphMemAllocNodeGetParams(handle, &params);
+    if (status != cudaSuccess) {
+        return cuda_fail(error, "cudaGraphMemAllocNodeGetParams", status);
+    }
+    node.alloc_bytes = params.bytesize;
+    node.mem_ptr = reinterpret_cast<std::uintptr_t>(params.dptr);
+    return true;
+}
+
+[[nodiscard]] inline bool fill_mem_free(cudaGraphNode_t handle, Node& node, std::string& error) {
+    void* freed = nullptr;
+    // dptr_out is declared void* but documented as "pointer to return the device
+    // address" and written through (a null value returns cudaErrorInvalidValue).
+    // void* holds a void**; dropping mem_ptr would make the pair uncorrelatable.
+    const cudaError_t status =
+        cudaGraphMemFreeNodeGetParams(handle, reinterpret_cast<void*>(&freed));
+    if (status != cudaSuccess) {
+        return cuda_fail(error, "cudaGraphMemFreeNodeGetParams", status);
+    }
+    node.mem_ptr = reinterpret_cast<std::uintptr_t>(freed);
+    return true;
+}
+
+[[nodiscard]] inline bool read_graph(cudaGraph_t graph, SourceKind source, Graph& out, int depth,
+                                     std::string& error, std::vector<cudaGraphNode_t>* api_handles) {
+    if (depth > k_max_graph_depth) {
+        error = "cudaGraphChildGraphNodeGetGraph: child graphs nested deeper than " +
+                std::to_string(k_max_graph_depth) + " levels";
+        return false;
+    }
+
+    std::size_t node_count = 0;
+    cudaError_t status = cudaGraphGetNodes(graph, nullptr, &node_count);
+    if (status != cudaSuccess) {
+        return cuda_fail(error, "cudaGraphGetNodes", status);
+    }
+    std::vector<cudaGraphNode_t> handles(node_count);
+    if (node_count != 0) {
+        status = cudaGraphGetNodes(graph, handles.data(), &node_count);
+        if (status != cudaSuccess) {
+            return cuda_fail(error, "cudaGraphGetNodes", status);
+        }
+        handles.resize(node_count);  // the API rewrites the count it filled
+    }
+
+    std::size_t edge_count = 0;
+    status = cudaGraphGetEdges(graph, nullptr, nullptr, &edge_count);
+    if (status != cudaSuccess) {
+        return cuda_fail(error, "cudaGraphGetEdges", status);
+    }
+    std::vector<cudaGraphNode_t> edge_from(edge_count);
+    std::vector<cudaGraphNode_t> edge_to(edge_count);
+    if (edge_count != 0) {
+        status = cudaGraphGetEdges(graph, edge_from.data(), edge_to.data(), &edge_count);
+        if (status != cudaSuccess) {
+            return cuda_fail(error, "cudaGraphGetEdges", status);
+        }
+        edge_from.resize(edge_count);
+        edge_to.resize(edge_count);
+    }
+
+    out.nodes.assign(handles.size(), Node{});
+    out.children.clear();
+    std::unordered_map<cudaGraphNode_t, int> index;
+    index.reserve(handles.size() * 2 + 1);
+
+    for (std::size_t i = 0; i < handles.size(); ++i) {
+        Node& node = out.nodes[i];
+        node.id = static_cast<int>(i);
+        cudaGraphNodeType type = cudaGraphNodeTypeKernel;
+        status = cudaGraphNodeGetType(handles[i], &type);
+        if (status != cudaSuccess) {
+            return cuda_fail(error, "cudaGraphNodeGetType", status);
+        }
+        index.emplace(handles[i], static_cast<int>(i));
+
+        switch (type) {
+            case cudaGraphNodeTypeKernel:
+                node.type = NodeType::Kernel;
+                if (!fill_kernel(handles[i], node, error)) {
+                    return false;
+                }
+                break;
+            case cudaGraphNodeTypeMemcpy:
+                node.type = NodeType::Memcpy;
+                break;
+            case cudaGraphNodeTypeMemset:
+                node.type = NodeType::Memset;
+                break;
+            case cudaGraphNodeTypeHost:
+                node.type = NodeType::Host;
+                break;
+            case cudaGraphNodeTypeGraph: {
+                node.type = NodeType::ChildGraph;
+                cudaGraph_t child = nullptr;
+                status = cudaGraphChildGraphNodeGetGraph(handles[i], &child);
+                if (status != cudaSuccess) {
+                    return cuda_fail(error, "cudaGraphChildGraphNodeGetGraph", status);
+                }
+                if (child == nullptr) {
+                    error = "cudaGraphChildGraphNodeGetGraph: returned a null graph";
+                    return false;
+                }
+                out.children.emplace_back();
+                node.child = static_cast<int>(out.children.size()) - 1;
+                if (!read_graph(child, source, out.children.back(), depth + 1, error, nullptr)) {
+                    return false;
+                }
+                break;
+            }
+            case cudaGraphNodeTypeEmpty:
+                node.type = NodeType::Empty;
+                break;
+            case cudaGraphNodeTypeWaitEvent:
+                node.type = NodeType::EventWait;
+                break;
+            case cudaGraphNodeTypeEventRecord:
+                node.type = NodeType::EventRecord;
+                break;
+            case cudaGraphNodeTypeExtSemaphoreSignal:
+            case cudaGraphNodeTypeExtSemaphoreWait:
+                node.type = NodeType::ExtSemaphore;
+                break;
+            case cudaGraphNodeTypeMemAlloc:
+                node.type = NodeType::MemAlloc;
+                if (!fill_mem_alloc(handles[i], node, error)) {
+                    return false;
+                }
+                break;
+            case cudaGraphNodeTypeMemFree:
+                node.type = NodeType::MemFree;
+                if (!fill_mem_free(handles[i], node, error)) {
+                    return false;
+                }
+                break;
+            default:
+                // 12.6's Conditional (0x0d) lands here on purpose: no rule needs it.
+                node.type = NodeType::Unknown;
+                break;
+        }
+    }
+
+    out.edges.clear();
+    out.edges.reserve(edge_from.size());
+    for (std::size_t i = 0; i < edge_from.size(); ++i) {
+        const auto from = index.find(edge_from[i]);
+        const auto to = index.find(edge_to[i]);
+        if (from == index.end() || to == index.end()) {
+            error = "cudaGraphGetEdges: an endpoint is not among the nodes cudaGraphGetNodes returned";
+            return false;
+        }
+        out.edges.emplace_back(from->second, to->second);
+    }
+
+    // A handle carries no timings and no provenance: levels, and the caller's kind.
+    out.weight_kind = WeightKind::Levels;
+    out.source = source;
+    // API order, held only long enough for from_cuda to permute it with the ids.
+    if (api_handles != nullptr) {
+        *api_handles = std::move(handles);
+    }
+    return true;
+}
+
+}  // namespace detail
 
 // The only public header that names a CUDA type: <cuda_runtime_api.h> and not
 // <cuda_runtime.h>, which drags in device-side declarations a host TU cannot use.
 // `handles_by_id` receives one handle per canonical id: root only, untouched on failure.
-[[nodiscard]] bool from_cuda(const cudaGraph_t& graph, SourceKind source, Graph& out,
-                             std::string& error,
-                             std::vector<cudaGraphNode_t>* handles_by_id = nullptr);
+[[nodiscard]] inline bool from_cuda(const cudaGraph_t& graph, SourceKind source, Graph& out,
+                                    std::string& error,
+                                    std::vector<cudaGraphNode_t>* handles_by_id = nullptr) {
+    Graph scratch;
+    std::vector<cudaGraphNode_t> api_handles;
+    std::vector<int> new_to_old;
+    error.clear();
+    if (!detail::read_graph(graph, source, scratch, 1, error, &api_handles)) {
+        return false;
+    }
+    canonicalize(scratch, &new_to_old);
+    GraphError problem;
+    if (!validate(scratch, problem)) {
+        error = "validate: " + problem.detail;
+        return false;
+    }
+    // Built aside and swapped in at the end: a failure above leaves the caller's vector alone
+    // instead of naming handles for a model that was never returned.
+    std::vector<cudaGraphNode_t> permuted;
+    if (handles_by_id != nullptr) {
+        permuted.resize(new_to_old.size());
+        for (std::size_t id = 0; id < new_to_old.size(); ++id) {
+            permuted[id] = api_handles[static_cast<std::size_t>(new_to_old[id])];
+        }
+    }
+    out = std::move(scratch);
+    if (handles_by_id != nullptr) {
+        *handles_by_id = std::move(permuted);
+    }
+    return true;
+}
+
+// One call from a handle to the file the CLI reads. The bytes are dump_graph's, so the
+// export and `graphlint_report --out` cannot disagree; cudart is the only library.
+[[nodiscard]] inline bool write_graph_json(const cudaGraph_t& graph, const std::string& path,
+                                           std::string& error,
+                                           SourceKind source = SourceKind::Capture) {
+    Graph model;
+    if (!from_cuda(graph, source, model, error)) {
+        error = path + ": " + error;
+        return false;
+    }
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        error = path + ": cannot open the file for writing";
+        return false;
+    }
+    const std::string document = dump_graph(model);
+    file.write(document.data(), static_cast<std::streamsize>(document.size()));
+    file.close();
+    if (!file) {
+        error = path + ": short write";
+        return false;
+    }
+    return true;
+}
 
 }  // namespace graphlint

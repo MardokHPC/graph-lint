@@ -11,7 +11,7 @@ project(graphlint
 # Options
 # ---------------------------------------------------------------------------
 option(GRAPHLINT_BUILD_TESTS "Build the host test suite (fetches GoogleTest)" ON)
-option(GRAPHLINT_WITH_CUDA "Build the cudaGraph_t conversion in src/cuda_source.cpp" OFF)
+option(GRAPHLINT_WITH_CUDA "Expose the cudaGraph_t reader and link cudart (needs the toolkit)" OFF)
 # Fetches cuda-timer for tools/bench.cu; needs nvcc and a GPU to run.
 option(GRAPHLINT_BUILD_BENCH "Build the instantiate/launch benchmark (needs a GPU)" OFF)
 # Two knobs on purpose: the library needs cudart only, nvcc and a GPU are needed
@@ -23,7 +23,7 @@ option(GRAPHLINT_BUILD_EXAMPLES "Build examples/ (needs CUDA, nvcc and a GPU to 
 if(GRAPHLINT_BUILD_DEVICE_TESTS AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
         "GRAPHLINT_BUILD_DEVICE_TESTS=ON needs GRAPHLINT_WITH_CUDA=ON: the device "
-        "suite reads graphs through src/cuda_source.cpp. Configure with "
+        "suite reads graphs through cuda_source.hpp. Configure with "
         "-DGRAPHLINT_WITH_CUDA=ON, or turn the device tests off.")
 endif()
 
@@ -36,14 +36,14 @@ endif()
 if(GRAPHLINT_BUILD_BENCH AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
         "GRAPHLINT_BUILD_BENCH=ON needs GRAPHLINT_WITH_CUDA=ON: tools/bench.cu reads every "
-        "graph back through src/cuda_source.cpp, so the number is the graph the linter "
+        "graph back through cuda_source.hpp, so the number is the graph the linter "
         "sees. Configure with -DGRAPHLINT_WITH_CUDA=ON, or turn the benchmark off.")
 endif()
 
 if(GRAPHLINT_BUILD_EXAMPLES AND NOT GRAPHLINT_WITH_CUDA)
     message(FATAL_ERROR
         "GRAPHLINT_BUILD_EXAMPLES=ON needs GRAPHLINT_WITH_CUDA=ON: examples/three_lines.cu "
-        "reads its captured graph through src/cuda_source.cpp. Configure with "
+        "reads its captured graph through cuda_source.hpp. Configure with "
         "-DGRAPHLINT_WITH_CUDA=ON, or turn the examples off.")
 endif()
 
@@ -114,23 +114,23 @@ target_include_directories(graphlint INTERFACE
 target_compile_features(graphlint INTERFACE cxx_std_17)
 
 # ---------------------------------------------------------------------------
-# CUDA reader (src/cuda_source.cpp)
+# CUDA reader (include/graphlint/cuda_source.hpp)
 #
-# Host-only C++: CUDAToolkit for the headers and cudart, no CUDA language and no
-# nvcc. This is the promise README makes: a host job can build the reader.
+# Header-only like the rest of the library: CUDAToolkit for the include path and
+# cudart for the calls, no CUDA language and no nvcc. A consumer needs one
+# include and one call, and a CUDA build already links cudart.
 # ---------------------------------------------------------------------------
 if(GRAPHLINT_WITH_CUDA)
     find_package(CUDAToolkit REQUIRED)
 
-    add_library(graphlint_cuda STATIC src/cuda_source.cpp)
+    add_library(graphlint_cuda INTERFACE)
     add_library(graphlint::cuda ALIAS graphlint_cuda)
     # The installed target must answer to the same name the build does: without
     # this the package would export graphlint::graphlint_cuda and no alias.
     set_target_properties(graphlint_cuda PROPERTIES EXPORT_NAME cuda)
-    # PUBLIC: cuda_source.hpp includes <cuda_runtime_api.h> and the library's
-    # users are the ones supplying the handle and the runtime.
-    target_link_libraries(graphlint_cuda PUBLIC graphlint::graphlint CUDA::cudart)
-    graphlint_apply_warnings(graphlint_cuda)
+    # INTERFACE: cuda_source.hpp includes <cuda_runtime_api.h> and calls cudart, so
+    # the include path and the runtime are the consumer's dependencies too.
+    target_link_libraries(graphlint_cuda INTERFACE graphlint::graphlint CUDA::cudart)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -603,16 +603,15 @@ endif()
 # ---------------------------------------------------------------------------
 include(CMakePackageConfigHelpers)
 
-# cuda_source.hpp and the reader ship together: the header declares from_cuda and
-# graphlint::cuda is the target that defines it. A host-only package has neither.
+# cuda_source.hpp is the reader, so the package either carries both or neither: a
+# host-only install leaves the header out and exports no graphlint::cuda.
 install(DIRECTORY include/graphlint
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.hpp" PATTERN "cuda_source.hpp" EXCLUDE
 )
 
 if(GRAPHLINT_WITH_CUDA)
-    install(TARGETS graphlint_cuda EXPORT graphlintTargets
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(TARGETS graphlint_cuda EXPORT graphlintTargets)
     install(FILES include/graphlint/cuda_source.hpp
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/graphlint)
 endif()
@@ -637,22 +636,14 @@ configure_package_config_file(
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/graphlint
 )
 
-# ARCH_INDEPENDENT says the package is headers only. A STATIC reader next to them
-# makes that untrue, so the flag follows the CUDA switch.
-if(GRAPHLINT_WITH_CUDA)
-    write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMinorVersion
-    )
-else()
-    write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMinorVersion
-        ARCH_INDEPENDENT
-    )
-endif()
+# Headers and two binaries: nothing in the package is compiled, so the version is
+# architecture independent again.
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMinorVersion
+    ARCH_INDEPENDENT
+)
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config.cmake

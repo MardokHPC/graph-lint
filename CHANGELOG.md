@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `write_graph_json`: include `<graphlint/cuda_source.hpp>` and one call turn a `cudaGraph_t` into the
+  document the CLI reads, with the path and the reason in `error` when it fails. The reader is
+  header-only, so a program that holds a handle needs no graphlint library and no CMake; cudart is
+  the only library behind it.
+- The release archives carry `include/graphlint/*.hpp` from the checkout next to `bin/`, at the same
+  paths on Windows and Linux. A download is the two tools plus the reader.
+
+### Changed
+
+- `graphlint::cuda` is an INTERFACE target that attaches the include path and `CUDA::cudart`; the
+  implementation of the reader moved into `cuda_source.hpp` and `src/cuda_source.cpp` is gone. The
+  installed package carries the header and no library, and the version file is `ARCH_INDEPENDENT`
+  again because nothing in the package is compiled.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

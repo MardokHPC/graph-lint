@@ -6,25 +6,30 @@
 #include <string>
 #include <vector>
 
+// Defined in other.cpp, which includes the same header: the two objects must link.
+std::string consumer_cuda_document_from_other_tu();
+
 int main(int argc, char** argv) {
-    // A runner has no card: the branch that needs a handle is only taken on request,
-    // so what this binary proves is the installed package, not the driver.
+    // A runner has no card: the branch that needs a handle is only taken on request, so
+    // what this binary proves is the installed header, not the driver.
     if (argc > 1) {
         const cudaGraph_t handle = nullptr;
         graphlint::Graph captured;
         std::string error;
         std::vector<cudaGraphNode_t> handles;
-        if (!graphlint::from_cuda(handle, graphlint::SourceKind::Built, captured, error,
-                                  &handles)) {
+        const bool read = graphlint::from_cuda(handle, graphlint::SourceKind::Built, captured,
+                                               error, &handles);
+        const bool wrote = graphlint::write_graph_json(handle, "consumer_cuda.json", error);
+        if (!read || !wrote) {
             std::fprintf(stderr, "consumer_cuda: %s\n", error.c_str());
             return 1;
         }
         return 0;
     }
 
-    // The header-only core comes with the same package, so the reader's output must
-    // round trip through the JSON the report CLI reads.
-    const std::string document = graphlint::dump_graph(graphlint::Graph{});
+    // The same header carries the model's JSON, so the package's reader and the file the
+    // report CLI reads must round trip byte for byte.
+    const std::string document = consumer_cuda_document_from_other_tu();
     graphlint::Graph parsed;
     graphlint::GraphError error;
     if (!graphlint::parse_graph(document, parsed, error) || !parsed.nodes.empty()) {
@@ -35,6 +40,6 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "consumer_cuda: round trip is not byte-identical\n");
         return 1;
     }
-    std::printf("graphlint_cuda linked, json round trip ok\n");
+    std::printf("graphlint header-only reader, json round trip ok\n");
     return 0;
 }

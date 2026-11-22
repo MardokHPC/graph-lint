@@ -10,8 +10,9 @@ A linter for the topology of a `cudaGraph_t`.
 verdict with exit code 0, 1 or 2. The library behind them is header-only, and the whole core builds
 without CUDA or a GPU.
 
-- `from_cuda` reads a `cudaGraph_t` into `graphlint::Graph`; `dump_graph` and `parse_graph` write and
-  read that model as JSON, byte for byte.
+- `from_cuda` reads a `cudaGraph_t` into `graphlint::Graph`, and `write_graph_json` takes that same
+  handle to a file in one call; `dump_graph` and `parse_graph` write and read the model as JSON, byte
+  for byte.
 - `topology` and `critical_path` give depth, width per level, the transitive reduction and the
   heaviest path; `lint` turns them into findings, each rule with the reason it applied or did not.
 - `to_dot` and `to_mermaid` draw the same graph deterministically; Mermaid compresses chains and
@@ -28,7 +29,7 @@ callbacks, event record and wait, external semaphore), and the peak device bytes
 `cudaMallocAsync` nodes. One document per graph, fixed key order, no timestamp and no local path, so
 a report is a diffable artifact.
 
-The model in `graph.hpp`, the reader in `src/cuda_source.cpp`, the analysis in `analysis.hpp` and the
+The model in `graph.hpp`, the reader in `cuda_source.hpp`, the analysis in `analysis.hpp` and the
 rules in `rules.hpp` are what a report is built from, and `report.json` is their first consumer:
 `graphlint_report` writes it, `graphlint_gate` compares two of them and recomputes the analysis from
 the embedded graph, so a stale block cannot decide a verdict (`docs/report.md`). What each rule
@@ -89,26 +90,23 @@ The capture shows the rule the tool exists for: four launches become a diamond a
 
 ## Your own graph
 
-You already have a `cudaGraph_t`: one call reads it into the model, another writes the JSON the CLI reads.
+You already have a `cudaGraph_t`: one include, one call, and no library to link.
 
 ```cpp
 #include <graphlint/cuda_source.hpp>
-#include <graphlint/json.hpp>
-
-#include <fstream>
-#include <string>
 
 // handle is the cudaGraph_t you already hold.
-graphlint::Graph graph;
 std::string error;
-if (!graphlint::from_cuda(handle, graphlint::SourceKind::Capture, graph, error)) { /* ... */ }
-std::ofstream{"mine.json", std::ios::binary} << graphlint::dump_graph(graph);
+if (!graphlint::write_graph_json(handle, "mine.json", error)) {
+    std::fprintf(stderr, "%s\n", error.c_str());
+}
 ```
 
-Link `graphlint::cuda` from a package installed with `GRAPHLINT_WITH_CUDA=ON`: the reader ships with
-the same header and the same target name you get from `add_subdirectory`. No graph yet?
-`graphlint_report --template mine.json` writes a two-node starting document, and refuses with exit 2
-if the file already exists, so a template you have edited is never overwritten.
+The reader is a header in `include/graphlint`: point the compiler at that directory and cudart is the
+only library behind it, which a program holding a handle already links. In CMake,
+`find_package(graphlint CONFIG)` or `add_subdirectory` hands out `graphlint::cuda` with the include
+path and cudart already attached. No graph yet? `graphlint_report --template mine.json` writes a
+two-node starting document, and refuses with exit 2 if the file already exists.
 
     graphlint_report mine.json --format summary
 
@@ -159,7 +157,7 @@ exit codes, stderr and byte equality. `ctest --test-dir build-host -V` prints th
 `artifacts_locale` is not a GoogleTest binary: it reruns `emit_artifacts` in a second process under
 `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
 
-The device suite is 8 cases in one ctest entry. They passed on the card named below; with no visible
+The device suite is 9 cases in one ctest entry. They passed on the card named below; with no visible
 card the binary exits 77 and ctest reports the entry SKIPPED:
 `set CUDA_VISIBLE_DEVICES=-1 && ctest --test-dir build-dev --output-on-failure`.
 
@@ -201,7 +199,7 @@ CI runs two jobs:
 
 The `cuda` job has no GPU: it proves the CUDA path compiles, not that it reads a handle. The
 host-only job also installs the package into a scratch prefix and builds `tests/consumer` against
-`find_package(graphlint CONFIG)`. The 8 device cases are the only ones that have touched a card.
+`find_package(graphlint CONFIG)`. The 9 device cases are the only ones that have touched a card.
 The matrix is in `.github/workflows/ci.yml`.
 
 ## Build
@@ -218,9 +216,10 @@ time and needs no CUDA toolkit, no nvcc and no GPU:
 the suite and the README figure are then compared with those files byte for byte. The same build
 produces `graphlint_report` and `graphlint_gate`; the gate is the only binary that can exit 1.
 
-The reader is compiled by `GRAPHLINT_WITH_CUDA=ON` and links `cudart` only, no nvcc. It needs a
-toolkit of 11.4 or newer, where the mem-node and child-graph getters arrive. nvcc enters only with
-`GRAPHLINT_BUILD_DEVICE_TESTS=ON`, which adds the demo and the device suite:
+The reader is a header: `GRAPHLINT_WITH_CUDA=ON` adds the toolkit's include path and `cudart` to
+`graphlint::cuda`, and nothing is compiled into a library. It needs a toolkit of 11.4 or newer, where
+the mem-node and child-graph getters arrive. nvcc enters only with `GRAPHLINT_BUILD_DEVICE_TESTS=ON`,
+which adds the demo and the device suite:
 
     build-device.bat configure
     build-device.bat build
@@ -255,15 +254,14 @@ graph-lint/
 │   └── weights.hpp
 ├── examples/
 │   └── three_lines.cu
-├── src/
-│   └── cuda_source.cpp
 ├── tests/
 │   ├── consumer/
 │   │   ├── CMakeLists.txt
 │   │   └── main.cpp
 │   ├── consumer_cuda/
 │   │   ├── CMakeLists.txt
-│   │   └── main.cpp
+│   │   ├── main.cpp
+│   │   └── other.cpp
 │   ├── data/graphs/
 │   │   ├── chain8.json
 │   │   ├── child_graph.json
@@ -337,6 +335,7 @@ graph-lint/
 │   ├── bench.md
 │   ├── CONVENTIONS.md
 │   ├── emitters.md
+│   ├── graph.md
 │   ├── limits.md
 │   ├── report.md
 │   ├── rules.md
@@ -351,6 +350,7 @@ graph-lint/
 │   └── m2_api/API_NOTES.md
 ├── cmake/graphlint-config.cmake.in
 ├── .github/workflows/ci.yml
+├── .github/workflows/release.yml
 ├── .gitattributes
 ├── .gitignore
 ├── CMakeLists.txt

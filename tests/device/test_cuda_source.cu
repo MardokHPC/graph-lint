@@ -10,6 +10,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,6 +27,7 @@ using graphlint::NodeType;
 using graphlint::parse_graph;
 using graphlint::SourceKind;
 using graphlint::WeightKind;
+using graphlint::write_graph_json;
 
 namespace {
 
@@ -138,6 +142,31 @@ TEST_F(CudaSource, ChainOfEightIsCanonical) {
     GraphError problem;
     ASSERT_TRUE(parse_graph(text, parsed, problem)) << problem.detail;
     EXPECT_TRUE(parsed == model);
+}
+
+// One call from a handle to the file the CLI reads: the bytes on disk are dump_graph's, so
+// a file a consumer exports and one the tool writes cannot drift.
+TEST_F(CudaSource, WriteGraphJsonMatchesTheModel) {
+    cudaGraphNode_t first = nullptr;
+    cudaGraphNode_t second = nullptr;
+    GL_CUDA(add_kernel(graph_, {}, dim3(1, 1, 1), dim3(64, 1, 1), first));
+    GL_CUDA(add_kernel(graph_, {first}, dim3(2, 1, 1), dim3(64, 1, 1), second));
+
+    const std::string path = "write_graph_json_device.json";
+    std::remove(path.c_str());
+    std::string error;
+    ASSERT_TRUE(write_graph_json(graph_, path, error, SourceKind::Built)) << error;
+
+    std::ifstream file(path, std::ios::binary);
+    ASSERT_TRUE(file.good()) << path;
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    file.close();
+    std::remove(path.c_str());
+
+    Graph model;
+    ASSERT_TRUE(from_cuda(graph_, SourceKind::Built, model, error)) << error;
+    EXPECT_EQ(buffer.str(), dump_graph(model));
 }
 
 // The handle map is the whole point of tools/weights.cu: id i has to name the node the model

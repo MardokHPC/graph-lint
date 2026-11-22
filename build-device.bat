@@ -10,8 +10,8 @@ rem NVCC_PREPEND_FLAGS=--allow-unsupported-compiler: CUDA 12.6 does not know
 rem MSVC 14.44 and refuses to compile the host code without it. Safe here because
 rem the host code is also compiled by /W4 /WX through -Xcompiler (CMakeLists.txt).
 rem
-rem Two options on purpose: GRAPHLINT_WITH_CUDA builds src/cuda_source.cpp with
-rem cudart only; GRAPHLINT_BUILD_DEVICE_TESTS adds nvcc, the demo and the GPU suite.
+rem Two options on purpose: GRAPHLINT_WITH_CUDA adds the header-only reader and
+rem cudart; GRAPHLINT_BUILD_DEVICE_TESTS adds nvcc, the demo and the GPU suite.
 rem GRAPHLINT_BUILD_BENCH adds nvcc, tools/bench.cu, tools/weights.cu and cuda-timer
 rem (FetchContent). GRAPHLINT_BUILD_EXAMPLES adds nvcc and examples/three_lines.cu.
 rem
