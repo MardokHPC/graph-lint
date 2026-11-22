@@ -11,12 +11,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+using graphlint::canonicalize;
 using graphlint::dump_graph;
 using graphlint::from_cuda;
 using graphlint::Graph;
@@ -149,10 +151,14 @@ TEST_F(CudaSource, ChainOfEightIsCanonical) {
 TEST_F(CudaSource, WriteGraphJsonMatchesTheModel) {
     cudaGraphNode_t first = nullptr;
     cudaGraphNode_t second = nullptr;
+    // Created backwards on purpose: the API order is not the canonical one, so a file
+    // written before canonicalize would carry the wrong ids.
+    GL_CUDA(add_kernel(graph_, {}, dim3(2, 1, 1), dim3(64, 1, 1), second));
     GL_CUDA(add_kernel(graph_, {}, dim3(1, 1, 1), dim3(64, 1, 1), first));
-    GL_CUDA(add_kernel(graph_, {first}, dim3(2, 1, 1), dim3(64, 1, 1), second));
+    GL_CUDA(cudaGraphAddDependencies(graph_, &first, &second, 1));
 
-    const std::string path = "write_graph_json_device.json";
+    const std::string path =
+        (std::filesystem::temp_directory_path() / "graphlint_write_graph_json.json").string();
     std::remove(path.c_str());
     std::string error;
     ASSERT_TRUE(write_graph_json(graph_, path, error, SourceKind::Built)) << error;
@@ -167,6 +173,14 @@ TEST_F(CudaSource, WriteGraphJsonMatchesTheModel) {
     Graph model;
     ASSERT_TRUE(from_cuda(graph_, SourceKind::Built, model, error)) << error;
     EXPECT_EQ(buffer.str(), dump_graph(model));
+
+    // An independent check: canonicalizing what was parsed cannot move an id, or the file
+    // was written from an ordered model the reader would never produce.
+    Graph parsed;
+    GraphError problem;
+    ASSERT_TRUE(parse_graph(buffer.str(), parsed, problem)) << problem.detail;
+    canonicalize(parsed);
+    EXPECT_EQ(dump_graph(parsed), buffer.str());
 }
 
 // The handle map is the whole point of tools/weights.cu: id i has to name the node the model
