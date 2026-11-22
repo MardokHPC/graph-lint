@@ -7,14 +7,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The release workflow: `GH_REPO` names the repository in the job that has no checkout, and the job
+  checks out the tag because `gh release create --notes-from-tag` reads the annotated message from
+  the local repository. Both were red on the first two runs for `v0.3.0`.
+
+## [0.3.0] - 2026-11-22
+
 ### Added
 
+- The tools ship with the package: `cmake --install` puts `graphlint_report` and `graphlint_gate` in
+  `bin/`, and a tag packs `bin/` and `include/graphlint/*.hpp` into one archive per system, at the
+  same paths on Windows and Linux. Before, the package shipped the library and the binaries stayed
+  in the build tree.
 - `write_graph_json`: include `<graphlint/cuda_source.hpp>` and one call turn a `cudaGraph_t` into the
   document the CLI reads, with the path and the reason in `error` when it fails. The reader is
   header-only, so a program that holds a handle needs no graphlint library and no CMake; cudart is
-  the only library behind it.
-- The release archives carry `include/graphlint/*.hpp` from the checkout next to `bin/`, at the same
-  paths on Windows and Linux. A download is the two tools plus the reader.
+  the only library behind it. The default source is `Capture`; a graph assembled by hand passes
+  `SourceKind::Built`.
+- `tests/consumer_cuda` compiles the header in two translation units, so a definition that stopped
+  being inline fails at link time.
+- The device suite is 9 cases (was 8): the export is compared with `dump_graph` on a real handle.
 
 ### Changed
 
@@ -22,6 +36,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   implementation of the reader moved into `cuda_source.hpp` and `src/cuda_source.cpp` is gone. The
   installed package carries the header and no library, and the version file is `ARCH_INDEPENDENT`
   again because nothing in the package is compiled.
+
+### Fixed
+
+- The export test compared the file with the same reader that wrote it, so a `from_cuda` that skipped
+  `canonicalize` passed it. The fixture creates the nodes in reverse API order now, and the parsed
+  document is re-canonicalized before the comparison.
 
 ## [0.2.0] - 2026-11-22
 
