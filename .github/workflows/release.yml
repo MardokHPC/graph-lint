@@ -1,0 +1,103 @@
+# Release: on a version tag, build the host-only tools and attach them to the GitHub
+# release. The tools read a file and need no toolkit, so the package is two binaries.
+#
+# workflow_dispatch exists for a tag pushed before this file existed: it packages an
+# existing tag without moving it.
+
+name: Release
+
+"on":
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to package and publish (for example v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  package:
+    name: package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Setup MSVC developer command prompt (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Tests are not the artifact: this build must produce two binaries and nothing else.
+      # The host-only switch is what keeps the tools free of cudart.
+      - name: Configure (host-only, no tests)
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DGRAPHLINT_BUILD_TESTS=OFF
+          -DGRAPHLINT_WITH_CUDA=OFF
+
+      - name: Build the tools
+        run: cmake --build build
+
+      - name: Install into the staging tree
+        run: cmake --install build --prefix stage
+
+      - name: Pack (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path stage/bin/* -DestinationPath "dist/graphlint-$env:TAG-win64.zip"
+
+      - name: Pack (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          tar -C stage/bin -czf "dist/graphlint-${TAG}-linux-x64.tar.gz" graphlint_report graphlint_gate
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphlint-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: publish the release
+    needs: package
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download the archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # --verify-tag makes the run fail if the tag is not on the remote: a release must
+      # name a commit that exists. A re-run uploads over the old assets instead of failing.
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "graph-lint ${TAG#v}" \
+              --notes-from-tag \
+              --verify-tag
+          fi

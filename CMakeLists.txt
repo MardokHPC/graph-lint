@@ -619,6 +619,12 @@ endif()
 
 install(TARGETS graphlint EXPORT graphlintTargets)
 
+# The tools are the product for anyone who already has a document: a package that
+# ships the library but not the binaries forces a consumer to build the repo.
+install(TARGETS graphlint_report graphlint_gate
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
 install(EXPORT graphlintTargets
     FILE graphlintTargets.cmake
     NAMESPACE graphlint::
