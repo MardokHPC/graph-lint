@@ -72,6 +72,12 @@ jobs:
       - name: Install the package into a scratch prefix
         run: cmake --install build --prefix "${{ runner.temp }}/gl" --config Release
 
+      # The reader ships only with GRAPHLINT_WITH_CUDA=ON. A package config that exports
+      # graphlint::cuda on a machine without a toolkit breaks at the first consumer, and
+      # nothing else in this job would notice.
+      - name: The host-only package carries no reader
+        run: cmake "-DPREFIX=${{ runner.temp }}/gl" -P tests/tools/check_host_package.cmake
+
       - name: Configure the consumer (find_package on the installed tree)
         run: >
           cmake -S tests/consumer -B build-consumer -G Ninja
