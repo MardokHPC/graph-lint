@@ -7,6 +7,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+### Added
+
+- `graphlint_report --template <out.json>`: the starting document for a hand-written graph, two
+  kernels in a chain, built in memory and written through `dump_graph`. It exits 2 if the file
+  exists, and a graph or a report option next to `--template` is a usage error: dropping either in
+  silence is worse than refusing. `tests/data/graphs/template.json` is the committed source of
+  truth, compared byte for byte by a process-level test, and the template is a graph the linter
+  reads clean.
+- `docs/graph.md`: the grammar of the schema 1 document. Keys per node type, the invariants that
+  make a cycle unrepresentable, and the parse errors a hand-written file can hit, each with the
+  message it produces.
+- The host-only package is guarded: `tests/tools/check_host_package.cmake` asserts it carries
+  neither `cuda_source.hpp` nor a reader library, and the `host-only` job runs it after the install.
+  Without it, a package config that exports `graphlint::cuda` on a machine with no toolkit would be
+  green until the first consumer.
+
+### Changed
+
+- The reader ships with the package. With `GRAPHLINT_WITH_CUDA=ON`, `cuda_source.hpp` and the static
+  library are installed and exported as `graphlint::cuda`, the same name the build alias uses; the
+  generated package config calls `find_dependency(CUDAToolkit)` only in that case, and a host-only
+  package does not look for a toolkit. The version file drops `ARCH_INDEPENDENT` when a static
+  library is part of the package.
+- The `cuda` CI job installs the package into a scratch prefix and builds `tests/consumer_cuda`
+  against `graphlint::cuda`, on all three toolkit versions.
+- ctest grows from 37 to 42 entries: the template pair, three refusal cases, and the host-only
+  guard. The 225 GoogleTest cases are unchanged.
+
+### Fixed
+
+- `--template` used the check-then-act pattern: a file created between the existence probe and the
+  truncating write was clobbered, while the README promised a template is never overwritten. The
+  refusal is the exclusive open now.
+- The capture snippet in the README used `SourceKind::Captured`; the enum is `Capture`, `Built`,
+  `File`.
+
+## [0.1.0] - 2026-11-21
+
 ### Added
 
 - The graph model: `graphlint::Graph` with `Node`, `NodeType`, `SourceKind` and canonical ids, so
@@ -14,17 +54,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The JSON contract, schema v1: `dump_graph` and `parse_graph`, sorted keys, no timestamp and no
   local path, parse errors with line and column, and a byte-identical round trip on every fixture.
 - `from_cuda`: reads a `cudaGraph_t` into the model (nodes, edges, mem alloc/free nodes, child
-  graphs up to 8 levels). Declared in `cuda_source.hpp`, defined in `src/cuda_source.cpp`. With
-  `GRAPHLINT_WITH_CUDA=ON` the header and the static reader are installed and exported as
-  `graphlint::cuda`, so `find_package(graphlint CONFIG)` ships the reader; that package config
-  finds `CUDAToolkit`, a host-only one does not.
-- `graphlint_report --template <out.json>`: writes the starting document for a hand-written graph
-  (two kernels in a chain) through `dump_graph`, and refuses to overwrite an existing file with
-  exit 2. `tests/data/graphs/template.json` is the committed source of truth, compared byte for
-  byte by a process-level ctest entry. A graph or a report option next to `--template` is a usage
-  error, because dropping either in silence would be worse than refusing.
-- `docs/graph.md`: the grammar of the graph document — keys per type, the invariants that make a
-  cycle unrepresentable, and the parse errors a hand-written file can hit.
+  graphs up to 8 levels). Declared in `cuda_source.hpp`, defined in `src/cuda_source.cpp`. The
+  header is not installed yet, so `find_package(graphlint CONFIG)` sees the model and JSON headers
+  only.
 - `tests/device/demo_graph.cu`: four shapes read from real handles and written to `graphs/`.
 - `topology`: levels, depth, width per level and the transitive reduction, with the reduction
   checked against an independent naive reference on small graphs. Pure host code.
@@ -64,8 +96,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pair turns the critical path into nanoseconds. `canonicalize` can now report its permutation and
   `from_cuda` the handle behind each canonical id.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
-  three toolkit versions without executing it, installs the package and builds
-  `tests/consumer_cuda` against `graphlint::cuda`.
+  three toolkit versions without executing it.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.
 - `docs/topology.md`: what a level, the depth, the width per level, the transitive reduction and the
   weighted path mean, with the worked example over `graphs/captured.json` and
@@ -77,5 +108,3 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   header-only library. nvcc and a GPU enter only with `GRAPHLINT_BUILD_DEVICE_TESTS`.
 - `demo_check` runs in the host-only test job, so the committed `graphs/*.json` are verified on a
   machine with no toolkit and no card, next to the model and JSON suites.
-
-`0.1.0` will be the first tag; the API is unstable until then.
