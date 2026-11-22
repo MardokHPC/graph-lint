@@ -21,6 +21,17 @@ without CUDA or a GPU.
 - `build-host.bat` runs everything that needs no card; `build-device.bat` adds the device tests, the
   demo, the example and the benchmark.
 
+## Requirements
+
+The two tools need no toolkit, no CMake and no GPU: they read a JSON document and write a report.
+
+The reader (`from_cuda`, `write_graph_json`) is a header: C++17, and a CUDA toolkit of 11.4 or newer
+for `<cuda_runtime_api.h>` and `cudart`. It does not need nvcc, and the program calling it is the one
+holding the graph, so the card is already there.
+
+Building this repository needs CMake 3.20 or newer, Ninja and a C++17 compiler. The device suite, the
+demo, the example and the benchmark add nvcc and a GPU.
+
 ## What it is
 
 `graph-lint` reports the topology of a `cudaGraph_t`: depth in levels, width per level, the edges a
