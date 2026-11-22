@@ -145,6 +145,23 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --timeout 600
 
+      # The reader is part of the package: installing it and building a separate consumer
+      # is the only thing that notices when the export drops graphlint::cuda or its header.
+      # No card is needed: the consumer's from_cuda branch is behind argc.
+      - name: Install the package into a scratch prefix
+        run: cmake --install build --prefix "${{ runner.temp }}/gl" --config Release
+
+      - name: Configure the CUDA consumer (find_package on the installed tree)
+        run: >
+          cmake -S tests/consumer_cuda -B build-consumer-cuda -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_PREFIX_PATH=${{ runner.temp }}/gl"
+
+      - name: Build and run the CUDA consumer
+        run: |
+          cmake --build build-consumer-cuda
+          ctest --test-dir build-consumer-cuda --output-on-failure
+
   # ---------------------------------------------------------------------------
   # 3. GPU: the same build with a real card, so the device suites PASS instead
   #    of skipping. Still commented out: no self-hosted runner with an NVIDIA

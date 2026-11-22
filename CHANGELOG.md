@@ -14,9 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The JSON contract, schema v1: `dump_graph` and `parse_graph`, sorted keys, no timestamp and no
   local path, parse errors with line and column, and a byte-identical round trip on every fixture.
 - `from_cuda`: reads a `cudaGraph_t` into the model (nodes, edges, mem alloc/free nodes, child
-  graphs up to 8 levels). Declared in `cuda_source.hpp`, defined in `src/cuda_source.cpp`. The
-  header is not installed yet, so `find_package(graphlint CONFIG)` sees the model and JSON headers
-  only.
+  graphs up to 8 levels). Declared in `cuda_source.hpp`, defined in `src/cuda_source.cpp`. With
+  `GRAPHLINT_WITH_CUDA=ON` the header and the static reader are installed and exported as
+  `graphlint::cuda`, so `find_package(graphlint CONFIG)` ships the reader; that package config
+  finds `CUDAToolkit`, a host-only one does not.
+- `graphlint_report --template <out.json>`: writes the starting document for a hand-written graph
+  (two kernels in a chain) through `dump_graph`, and refuses to overwrite an existing file with
+  exit 2. `tests/data/graphs/template.json` is the committed source of truth, compared byte for
+  byte by a process-level ctest entry.
 - `tests/device/demo_graph.cu`: four shapes read from real handles and written to `graphs/`.
 - `topology`: levels, depth, width per level and the transitive reduction, with the reduction
   checked against an independent naive reference on small graphs. Pure host code.
@@ -56,7 +61,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pair turns the critical path into nanoseconds. `canonicalize` can now report its permutation and
   `from_cuda` the handle behind each canonical id.
 - CI with a host-only job on Linux and Windows, plus a CUDA job that compiles the device path on
-  three toolkit versions without executing it.
+  three toolkit versions without executing it, installs the package and builds
+  `tests/consumer_cuda` against `graphlint::cuda`.
 - `docs/limits.md`: what a `cudaGraph_t` cannot expose, and the canonical-id residue.
 - `docs/topology.md`: what a level, the depth, the width per level, the transitive reduction and the
   weighted path mean, with the worked example over `graphs/captured.json` and

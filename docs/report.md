@@ -122,6 +122,10 @@ success, one `<path>:<line>:<column>: <detail>` line on failure. `--detail-param
 DOT and Mermaid, `--max-nodes < 1` is a usage error, and a `report.json` handed here fails at `unknown key
 "analysis"`, exit 2.
 
+`--template <out.json>` is the other way in: it takes no graph, writes the two-node starting document
+through `dump_graph`, and is exit 2 if the file already exists, so an edited template is never
+overwritten. `tests/data/graphs/template.json` is the committed bytes.
+
 `graphlint_gate --baseline <a.json> --current <b.json> [--json <path>] [--max-depth-increase N]
 [--max-redundant-increase N] [--max-severe-increase N] [--max-path-increase-ns N] [--quiet]` exits with the
 verdict; a negative threshold is a usage error, because `0 > -1` turns a no-op comparison into a regression.

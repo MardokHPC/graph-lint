@@ -124,6 +124,9 @@ if(GRAPHLINT_WITH_CUDA)
 
     add_library(graphlint_cuda STATIC src/cuda_source.cpp)
     add_library(graphlint::cuda ALIAS graphlint_cuda)
+    # The installed target must answer to the same name the build does: without
+    # this the package would export graphlint::graphlint_cuda and no alias.
+    set_target_properties(graphlint_cuda PROPERTIES EXPORT_NAME cuda)
     # PUBLIC: cuda_source.hpp includes <cuda_runtime_api.h> and the library's
     # users are the ones supplying the handle and the runtime.
     target_link_libraries(graphlint_cuda PUBLIC graphlint::graphlint CUDA::cudart)
@@ -474,6 +477,23 @@ if(GRAPHLINT_BUILD_TESTS)
         "-DEXPECT_STDERR=unknown key \"analysis\""
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
 
+    # --template: the starting document a hand-written graph begins from. The bytes are
+    # compared with the committed file, and a second call must refuse to overwrite it.
+    add_test(NAME report_template COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DOUT=${CMAKE_CURRENT_BINARY_DIR}/template.json
+        "-DEXPECTED_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs/template.json"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/report_template.cmake)
+
+    # The template is a graph the linter reads clean, or the starting point would be a trap.
+    add_test(NAME report_template_lints_clean COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=0
+        "-DARGS=--format;summary;${CMAKE_CURRENT_SOURCE_DIR}/tests/data/graphs/template.json"
+        "-DEXPECT_STDERR=^$"
+        "-DEXPECT_STDOUT=findings: 0"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
     # --weights: a table bound to the graph turns the summary into a nanosecond path, and a
     # refused table is exit 2 with the position of the fault.
     add_test(NAME report_weights_summary COMMAND ${CMAKE_COMMAND}
@@ -560,12 +580,19 @@ endif()
 # ---------------------------------------------------------------------------
 include(CMakePackageConfigHelpers)
 
-# cuda_source.hpp is installed only when graphlint_cuda is exported (M6): until
-# then the header would declare from_cuda with no target to link it from.
+# cuda_source.hpp and the reader ship together: the header declares from_cuda and
+# graphlint::cuda is the target that defines it. A host-only package has neither.
 install(DIRECTORY include/graphlint
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.hpp" PATTERN "cuda_source.hpp" EXCLUDE
 )
+
+if(GRAPHLINT_WITH_CUDA)
+    install(TARGETS graphlint_cuda EXPORT graphlintTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(FILES include/graphlint/cuda_source.hpp
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/graphlint)
+endif()
 
 install(TARGETS graphlint EXPORT graphlintTargets)
 
@@ -581,12 +608,22 @@ configure_package_config_file(
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/graphlint
 )
 
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMinorVersion
-    ARCH_INDEPENDENT
-)
+# ARCH_INDEPENDENT says the package is headers only. A STATIC reader next to them
+# makes that untrue, so the flag follows the CUDA switch.
+if(GRAPHLINT_WITH_CUDA)
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMinorVersion
+    )
+else()
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config-version.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMinorVersion
+        ARCH_INDEPENDENT
+    )
+endif()
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/graphlint-config.cmake

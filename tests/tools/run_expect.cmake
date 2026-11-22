@@ -6,7 +6,7 @@
 #
 # Usage:
 #   cmake -DTOOL=<path> -DEXPECTED=<int> "-DARGS=<arg;arg;...>"
-#         [-DEXPECT_STDERR=<regex>] [-DEXPECT_STDOUT_EMPTY=ON]
+#         [-DEXPECT_STDERR=<regex>] [-DEXPECT_STDOUT=<regex>] [-DEXPECT_STDOUT_EMPTY=ON]
 #         [-DEXPECT_JSON=<path>] [-DEXPECT_JSON_CONTAINS=<substring>]
 #         -P run_expect.cmake
 
@@ -29,6 +29,11 @@ endif()
 if(DEFINED EXPECT_STDERR AND NOT err MATCHES "${EXPECT_STDERR}")
     message(FATAL_ERROR
         "stderr did not match '${EXPECT_STDERR}'\n--- stderr ---\n${err}")
+endif()
+
+if(DEFINED EXPECT_STDOUT AND NOT out MATCHES "${EXPECT_STDOUT}")
+    message(FATAL_ERROR
+        "stdout did not match '${EXPECT_STDOUT}'\n--- stdout ---\n${out}")
 endif()
 
 if(EXPECT_STDOUT_EMPTY AND NOT out STREQUAL "")

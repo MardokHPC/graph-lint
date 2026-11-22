@@ -1,6 +1,14 @@
 @PACKAGE_INIT@
 
-# Header-only and dependency-free: there is nothing to find_dependency() here.
+include(CMakeFindDependencyMacro)
+
+# The reader is a STATIC library whose public header includes <cuda_runtime_api.h>:
+# a package built with it needs the toolkit, a host-only one must not look for it.
+set(graphlint_WITH_CUDA @GRAPHLINT_WITH_CUDA@)
+if(graphlint_WITH_CUDA)
+    find_dependency(CUDAToolkit)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/graphlintTargets.cmake")
 
 check_required_components(graphlint)

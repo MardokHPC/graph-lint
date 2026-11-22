@@ -87,6 +87,32 @@ report: graphlint_report "%TEMP%/graphlint_three_lines.json" --format summary
 
 The capture shows the rule the tool exists for: four launches become a diamond and two `cudaEventRecord`/`cudaStreamWaitEvent` pairs become edges, not nodes, so the fork is one node deep on each side. The last line is the check: the JSON it wrote is read back by the report binary with no CUDA. `build-device.bat example` builds and runs it.
 
+## Your own graph
+
+You already have a `cudaGraph_t`: one call reads it into the model, another writes the JSON the CLI reads.
+
+```cpp
+#include <graphlint/cuda_source.hpp>
+#include <graphlint/json.hpp>
+
+#include <fstream>
+#include <string>
+
+graphlint::Graph graph;
+std::string error;
+if (!graphlint::from_cuda(handle, graphlint::SourceKind::Captured, graph, error)) { /* ... */ }
+std::ofstream{"mine.json", std::ios::binary} << graphlint::dump_graph(graph);
+```
+
+Link `graphlint::cuda` from `find_package(graphlint CONFIG)` and the reader is part of the package,
+with the same headers and target name you get from `add_subdirectory`. No graph yet?
+`graphlint_report --template mine.json` writes a two-node starting document, and refuses with exit 2
+if the file already exists, so a template you have edited is never overwritten.
+
+    graphlint_report mine.json --format summary
+
+The schema, the reader and the install are in [`docs/graph.md`](docs/graph.md).
+
 ## What it is not
 
 | incumbent | what it gives |
@@ -126,8 +152,8 @@ defect waiting for a fix.
 
 The host suite needs no CUDA toolkit and no GPU: 225 GoogleTest cases in twelve binaries (`config` 3,
 `graph` 11, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 22, `gate` 27, `weights` 21,
-`demo_check` 5, `bench` 2, `weights_artifact` 1). ctest runs 37 entries: those twelve, `artifacts_locale`,
-`report_ns_determinism`, and twenty-three process-level entries that run the two tools and assert
+`demo_check` 5, `bench` 2, `weights_artifact` 1). ctest runs 39 entries: those twelve, `artifacts_locale`,
+`report_ns_determinism`, and twenty-five process-level entries that run the two tools and assert
 exit codes, stderr and byte equality. `ctest --test-dir build-host -V` prints the per-binary counts.
 `artifacts_locale` is not a GoogleTest binary: it reruns `emit_artifacts` in a second process under
 `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
@@ -170,7 +196,7 @@ CI runs two jobs:
 | job | environment | what it does |
 |---|---|---|
 | `host-only` | ubuntu-22.04, windows-2022, no toolkit | builds the core and runs the host suite |
-| `cuda` | ubuntu-22.04 with CUDA 11.8 and 12.1, windows-2022 with 12.9 | compiles the reader, the demo, the example and the device suite on sm_75 |
+| `cuda` | ubuntu-22.04 with CUDA 11.8 and 12.1, windows-2022 with 12.9 | compiles the reader, the demo, the example and the device suite on sm_75, then builds `tests/consumer_cuda` against the installed package |
 
 The `cuda` job has no GPU: it proves the CUDA path compiles, not that it reads a handle. The
 host-only job also installs the package into a scratch prefix and builds `tests/consumer` against
@@ -234,13 +260,17 @@ graph-lint/
 │   ├── consumer/
 │   │   ├── CMakeLists.txt
 │   │   └── main.cpp
+│   ├── consumer_cuda/
+│   │   ├── CMakeLists.txt
+│   │   └── main.cpp
 │   ├── data/graphs/
 │   │   ├── chain8.json
 │   │   ├── child_graph.json
 │   │   ├── diamond.json
 │   │   ├── empty.json
 │   │   ├── mixed.json
-│   │   └── ns.json
+│   │   ├── ns.json
+│   │   └── template.json
 │   ├── data/reports/
 │   │   ├── baseline.json
 │   │   ├── depth_plus_one.json
@@ -260,6 +290,7 @@ graph-lint/
 │   ├── tools/
 │   │   ├── report_determinism.cmake
 │   │   ├── report_out.cmake
+│   │   ├── report_template.cmake
 │   │   └── run_expect.cmake
 │   ├── check_artifacts.cmake
 │   ├── test_analysis.cpp

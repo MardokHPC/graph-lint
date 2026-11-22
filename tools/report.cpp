@@ -46,9 +46,31 @@ void enable_binary_stdout() {
 int usage(const char* program) {
     std::fprintf(stderr,
                  "usage: %s <graph.json> [--format summary|json|dot|mermaid] [--weights <path>] "
-                 "[--out <path>] [--detail-params] [--max-nodes N]\n",
-                 program);
+                 "[--out <path>] [--detail-params] [--max-nodes N]\n"
+                 "       %s --template <out.json>\n",
+                 program, program);
     return 2;
+}
+
+// The starting point for a hand-written document: two kernels in a chain is the smallest
+// shape with an edge, a depth of two and nothing the linter would flag. It is built here,
+// not stored as a string, so the template cannot drift from dump_graph's format.
+Graph starting_graph() {
+    Graph graph;
+    graph.source = graphlint::SourceKind::File;
+    graph.weight_kind = graphlint::WeightKind::Levels;
+    const char* const names[] = {"kernel_a", "kernel_b"};
+    for (const char* name : names) {
+        graphlint::Node node;
+        node.id = static_cast<int>(graph.nodes.size());
+        node.type = graphlint::NodeType::Kernel;
+        node.name = name;
+        node.grid = {1, 1, 1};
+        node.block = {128, 1, 1};
+        graph.nodes.push_back(node);
+    }
+    graph.edges.emplace_back(0, 1);
+    return graph;
 }
 
 bool parse_int(const char* text, int& value) {
@@ -121,6 +143,7 @@ int main(int argc, char** argv) {
     std::string path;
     std::string out_path;
     std::string weights_path;
+    std::string template_path;
     ReportOptions options;
 
     for (int i = 1; i < argc; ++i) {
@@ -133,6 +156,8 @@ int main(int argc, char** argv) {
             weights_path = argv[++i];
         } else if (argument == "--out" && i + 1 < argc) {
             out_path = argv[++i];
+        } else if (argument == "--template" && i + 1 < argc) {
+            template_path = argv[++i];
         } else if (argument == "--detail-params") {
             options.detail_params = true;
         } else if (argument == "--max-nodes" && i + 1 < argc) {
@@ -146,6 +171,26 @@ int main(int argc, char** argv) {
         } else {
             return usage(argv[0]);
         }
+    }
+    if (!template_path.empty()) {
+        if (!path.empty()) {
+            std::fprintf(stderr,
+                         "graphlint_report: --template writes the starting document and takes "
+                         "no graph\n");
+            return usage(argv[0]);
+        }
+        // A template is a starting point: overwriting one would delete the edits made to it.
+        bool exists = false;
+        {
+            std::ifstream probe(template_path, std::ios::binary);
+            exists = static_cast<bool>(probe);
+        }
+        if (exists) {
+            std::fprintf(stderr, "%s:0:0: file exists, refusing to overwrite\n",
+                         template_path.c_str());
+            return 2;
+        }
+        return write_document(template_path, dump_graph(starting_graph()));
     }
     if (path.empty()) {
         return usage(argv[0]);
