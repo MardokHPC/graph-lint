@@ -114,7 +114,9 @@ two-node starting document, and refuses with exit 2 if the file already exists.
 
     graphlint_report mine.json --format summary
 
-The document schema is in [`docs/graph.md`](docs/graph.md).
+The [releases page](https://github.com/MardokHPC/graph-lint/releases) ships one archive per system
+with `bin/` and `include/graphlint/` at the root: the tools run with no toolkit and need no build,
+and the header is the reader. The document schema is in [`docs/graph.md`](docs/graph.md).
 
 ## What it is not
 
