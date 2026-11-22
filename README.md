@@ -101,7 +101,7 @@ You already have a `cudaGraph_t`: one call reads it into the model, another writ
 // handle is the cudaGraph_t you already hold.
 graphlint::Graph graph;
 std::string error;
-if (!graphlint::from_cuda(handle, graphlint::SourceKind::Captured, graph, error)) { /* ... */ }
+if (!graphlint::from_cuda(handle, graphlint::SourceKind::Capture, graph, error)) { /* ... */ }
 std::ofstream{"mine.json", std::ios::binary} << graphlint::dump_graph(graph);
 ```
 
