@@ -95,6 +95,9 @@ You already have a `cudaGraph_t`: one include, one call, and no library to link.
 ```cpp
 #include <graphlint/cuda_source.hpp>
 
+#include <cstdio>
+#include <string>
+
 // handle is the cudaGraph_t you already hold.
 std::string error;
 if (!graphlint::write_graph_json(handle, "mine.json", error)) {
@@ -103,9 +106,10 @@ if (!graphlint::write_graph_json(handle, "mine.json", error)) {
 ```
 
 The reader is a header in `include/graphlint`: point the compiler at that directory and cudart is the
-only library behind it, which a program holding a handle already links. In CMake,
-`find_package(graphlint CONFIG)` or `add_subdirectory` hands out `graphlint::cuda` with the include
-path and cudart already attached. No graph yet? `graphlint_report --template mine.json` writes a
+only library behind it, which a program holding a handle already links. In CMake, `graphlint::cuda`
+carries both, from `add_subdirectory` or `find_package(graphlint CONFIG)`, when the project or the
+package was configured with `GRAPHLINT_WITH_CUDA=ON`. `write_graph_json` truncates an existing file:
+it is an export, not an editor. No graph yet? `graphlint_report --template mine.json` writes a
 two-node starting document, and refuses with exit 2 if the file already exists.
 
     graphlint_report mine.json --format summary

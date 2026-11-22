@@ -16,9 +16,9 @@ graphlint_report --template graph.json
 That writes the smallest document with a real shape: two kernels in a chain, `weight_kind` `levels`,
 `source` `file`. It refuses to overwrite an existing file; edit it or pick another path.
 
-If the graph already exists as a `cudaGraph_t`, do not write JSON at all: read it with
-`from_cuda` and write the model with `dump_graph` (`docs/limits.md` says what the reader cannot
-see). The template is for the case where there is no handle.
+If the graph already exists as a `cudaGraph_t`, do not write JSON at all: `write_graph_json` reads
+the handle and writes this document in one call (`docs/limits.md` says what the reader cannot see).
+The template is for the case where there is no handle.
 
 ## The object
 

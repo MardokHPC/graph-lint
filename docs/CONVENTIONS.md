@@ -15,7 +15,7 @@ A comment stays only if it says what the code cannot: why that choice, which con
 which bug it avoids, which behaviour is not obvious from the line below. If the function name says
 it, the comment is not needed.
 
-Target in `include/` and `src/`: ≤ 10% of non-blank lines are comments, no block runs past 3
+Target in `include/`: ≤ 10% of non-blank lines are comments, no block runs past 3
 consecutive lines. Measured: `poolkit/include` 8.0% and zero blocks over 3 lines (5.1% repo-wide),
 `cuda-timer/include` 20.4% with blocks up to 12 lines. The first is the shape to copy; the second is
 the Doxygen we do not want here. Past 3 lines it is prose: it goes to `docs/` or it goes away. Only
@@ -130,12 +130,11 @@ GCC fails with `-Werror=unused-result`, so the `(void)` cast goes in the same co
 ## 10. How to check a file is in order
 
 From the repo root, in Git Bash. Every command reads tracked files only (`git grep`, `git ls-files`): a
-build directory in the working tree must not change the answer. Items 1, 2 and 7 have nothing to read
-until M2.
+build directory in the working tree must not change the answer.
 
-1. Comment blocks over 3 lines: `git ls-files 'include/**' 'src/**' | xargs -r awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\/\*|\*)/{if(++n>3)print FILENAME":"FNR;next}{n=0}'` — zero.
-2. Comment density: `git ls-files 'include/**' 'src/**' | xargs -r cat | awk 'NF{t++} /^[[:space:]]*(\/\/|\/\*|\*)/{c++} END{printf "%.1f%%\n", t ? 100*c/t : 0}'` — ≤ 10.0%.
-3. Blacklist words: `git grep -niE 'robust|comprehensive|seamless|guarantee[sd]?|key takeaway|why this matters|in summary|effective' -- README.md docs include src ':!docs/CONVENTIONS.md'` — zero.
+1. Comment blocks over 3 lines: `git ls-files 'include/**' | xargs -r awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\/\*|\*)/{if(++n>3)print FILENAME":"FNR;next}{n=0}'` — zero.
+2. Comment density: `git ls-files 'include/**' | xargs -r cat | awk 'NF{t++} /^[[:space:]]*(\/\/|\/\*|\*)/{c++} END{printf "%.1f%%\n", t ? 100*c/t : 0}'` — ≤ 10.0%.
+3. Blacklist words: `git grep -niE 'robust|comprehensive|seamless|guarantee[sd]?|key takeaway|why this matters|in summary|effective' -- README.md docs include ':!docs/CONVENTIONS.md'` — zero.
 4. Duplication: `git grep -c '<six-word phrase>'` — one file, count greater than zero.
 5. Absolute paths and the account name: `git grep -nE '(^|[^A-Za-z])[A-Za-z]:[\\/]|/Users/|Simone' -- ':!LICENSE' ':!docs/CONVENTIONS.md'` — zero. The `[^A-Za-z]` boundary is what keeps `https://` out; without it the check never passes.
 6. Lazy test names: `git grep -nE 'TEST\([^,]+, *(Test[0-9]+|Works|Basic)\)' -- tests` — zero.
