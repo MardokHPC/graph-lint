@@ -21,7 +21,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `graphlint_report --template <out.json>`: writes the starting document for a hand-written graph
   (two kernels in a chain) through `dump_graph`, and refuses to overwrite an existing file with
   exit 2. `tests/data/graphs/template.json` is the committed source of truth, compared byte for
-  byte by a process-level ctest entry.
+  byte by a process-level ctest entry. A graph or a report option next to `--template` is a usage
+  error, because dropping either in silence would be worse than refusing.
+- `docs/graph.md`: the grammar of the graph document — keys per type, the invariants that make a
+  cycle unrepresentable, and the parse errors a hand-written file can hit.
 - `tests/device/demo_graph.cu`: four shapes read from real handles and written to `graphs/`.
 - `topology`: levels, depth, width per level and the transitive reduction, with the reduction
   checked against an independent naive reference on small graphs. Pure host code.

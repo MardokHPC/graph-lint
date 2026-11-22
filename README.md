@@ -98,20 +98,21 @@ You already have a `cudaGraph_t`: one call reads it into the model, another writ
 #include <fstream>
 #include <string>
 
+// handle is the cudaGraph_t you already hold.
 graphlint::Graph graph;
 std::string error;
 if (!graphlint::from_cuda(handle, graphlint::SourceKind::Captured, graph, error)) { /* ... */ }
 std::ofstream{"mine.json", std::ios::binary} << graphlint::dump_graph(graph);
 ```
 
-Link `graphlint::cuda` from `find_package(graphlint CONFIG)` and the reader is part of the package,
-with the same headers and target name you get from `add_subdirectory`. No graph yet?
+Link `graphlint::cuda` from a package installed with `GRAPHLINT_WITH_CUDA=ON`: the reader ships with
+the same header and the same target name you get from `add_subdirectory`. No graph yet?
 `graphlint_report --template mine.json` writes a two-node starting document, and refuses with exit 2
 if the file already exists, so a template you have edited is never overwritten.
 
     graphlint_report mine.json --format summary
 
-The schema, the reader and the install are in [`docs/graph.md`](docs/graph.md).
+The document schema is in [`docs/graph.md`](docs/graph.md).
 
 ## What it is not
 
@@ -152,8 +153,8 @@ defect waiting for a fix.
 
 The host suite needs no CUDA toolkit and no GPU: 225 GoogleTest cases in twelve binaries (`config` 3,
 `graph` 11, `json` 28, `analysis` 30, `rules` 51, `emitters` 24, `report` 22, `gate` 27, `weights` 21,
-`demo_check` 5, `bench` 2, `weights_artifact` 1). ctest runs 39 entries: those twelve, `artifacts_locale`,
-`report_ns_determinism`, and twenty-five process-level entries that run the two tools and assert
+`demo_check` 5, `bench` 2, `weights_artifact` 1). ctest runs 42 entries: those twelve, `artifacts_locale`,
+`report_ns_determinism`, and twenty-eight process-level entries that run the two tools and assert
 exit codes, stderr and byte equality. `ctest --test-dir build-host -V` prints the per-binary counts.
 `artifacts_locale` is not a GoogleTest binary: it reruns `emit_artifacts` in a second process under
 `LC_ALL=de_DE.UTF-8` and `TZ=Asia/Tokyo`, then compares the eight files with `graphs/` byte for byte.
@@ -288,6 +289,7 @@ graph-lint/
 │   │   ├── demo_graph.cu
 │   │   └── test_cuda_source.cu
 │   ├── tools/
+│   │   ├── check_host_package.cmake
 │   │   ├── report_determinism.cmake
 │   │   ├── report_out.cmake
 │   │   ├── report_template.cmake
