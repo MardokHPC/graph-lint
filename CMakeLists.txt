@@ -494,6 +494,29 @@ if(GRAPHLINT_BUILD_TESTS)
         "-DEXPECT_STDOUT=findings: 0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
 
+    # --template is not a report mode: a graph or a report option next to it would be
+    # dropped in silence, which is worse than a usage error.
+    add_test(NAME report_template_rejects_graph COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=--template;x.json;graph.json"
+        "-DEXPECT_STDERR=takes no graph and no report option"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    add_test(NAME report_template_rejects_option COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=--template;x.json;--out;y.json"
+        "-DEXPECT_STDERR=takes no graph and no report option"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
+    add_test(NAME report_template_once COMMAND ${CMAKE_COMMAND}
+        -DTOOL=$<TARGET_FILE:graphlint_report>
+        -DEXPECTED=2
+        "-DARGS=--template;a.json;--template;b.json"
+        "-DEXPECT_STDERR=takes one path"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/run_expect.cmake)
+
     # --weights: a table bound to the graph turns the summary into a nanosecond path, and a
     # refused table is exit 2 with the position of the fault.
     add_test(NAME report_weights_summary COMMAND ${CMAKE_COMMAND}

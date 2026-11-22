@@ -9,6 +9,7 @@
 
 #include <tools/report_core.hpp>
 
+#include <cerrno>
 #include <charconv>
 #include <cstddef>
 #include <cstdio>
@@ -133,6 +134,34 @@ int write_document(const std::string& path, const std::string& document) {
     return 0;
 }
 
+// "x" makes the refusal the open itself: a probe followed by a truncating write would
+// clobber a file created in between, and "never overwritten" would be a promise, not a fact.
+int write_template(const std::string& path) {
+#if defined(_MSC_VER)
+    std::FILE* file = nullptr;
+    const int open_error = ::fopen_s(&file, path.c_str(), "wbx");
+#else
+    std::FILE* file = std::fopen(path.c_str(), "wbx");
+    const int open_error = file == nullptr ? errno : 0;
+#endif
+    if (file == nullptr) {
+        if (open_error == EEXIST) {
+            std::fprintf(stderr, "%s:0:0: file exists, refusing to overwrite\n", path.c_str());
+        } else {
+            std::fprintf(stderr, "%s:0:0: cannot write the file\n", path.c_str());
+        }
+        return 2;
+    }
+    const std::string document = dump_graph(starting_graph());
+    const std::size_t written = std::fwrite(document.data(), 1, document.size(), file);
+    const bool closed = std::fclose(file) == 0;
+    if (written != document.size() || !closed) {
+        std::fprintf(stderr, "%s:0:0: short write\n", path.c_str());
+        return 2;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -144,23 +173,31 @@ int main(int argc, char** argv) {
     std::string out_path;
     std::string weights_path;
     std::string template_path;
+    int template_count = 0;
+    bool report_option = false;
     ReportOptions options;
 
     for (int i = 1; i < argc; ++i) {
         const std::string argument = argv[i];
         if (argument == "--format" && i + 1 < argc) {
+            report_option = true;
             if (!format_from_token(argv[++i], options.format)) {
                 return usage(argv[0]);
             }
         } else if (argument == "--weights" && i + 1 < argc) {
+            report_option = true;
             weights_path = argv[++i];
         } else if (argument == "--out" && i + 1 < argc) {
+            report_option = true;
             out_path = argv[++i];
         } else if (argument == "--template" && i + 1 < argc) {
+            ++template_count;
             template_path = argv[++i];
         } else if (argument == "--detail-params") {
+            report_option = true;
             options.detail_params = true;
         } else if (argument == "--max-nodes" && i + 1 < argc) {
+            report_option = true;
             if (!parse_int(argv[++i], options.max_nodes)) {
                 return usage(argv[0]);
             }
@@ -172,25 +209,23 @@ int main(int argc, char** argv) {
             return usage(argv[0]);
         }
     }
-    if (!template_path.empty()) {
-        if (!path.empty()) {
-            std::fprintf(stderr,
-                         "graphlint_report: --template writes the starting document and takes "
-                         "no graph\n");
+    if (template_count > 1) {
+        std::fprintf(stderr, "graphlint_report: --template takes one path\n");
+        return usage(argv[0]);
+    }
+    if (template_count == 1) {
+        if (template_path.empty()) {
+            std::fprintf(stderr, "graphlint_report: --template needs a path\n");
             return usage(argv[0]);
         }
-        // A template is a starting point: overwriting one would delete the edits made to it.
-        bool exists = false;
-        {
-            std::ifstream probe(template_path, std::ios::binary);
-            exists = static_cast<bool>(probe);
+        // Dropping a graph or an option in silence is the one failure mode a CLI must not have.
+        if (!path.empty() || report_option) {
+            std::fprintf(stderr,
+                         "graphlint_report: --template writes the starting document and takes "
+                         "no graph and no report option\n");
+            return usage(argv[0]);
         }
-        if (exists) {
-            std::fprintf(stderr, "%s:0:0: file exists, refusing to overwrite\n",
-                         template_path.c_str());
-            return 2;
-        }
-        return write_document(template_path, dump_graph(starting_graph()));
+        return write_template(template_path);
     }
     if (path.empty()) {
         return usage(argv[0]);
