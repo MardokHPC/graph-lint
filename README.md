@@ -23,7 +23,8 @@ without CUDA or a GPU.
 
 ## Requirements
 
-The two tools need no toolkit, no CMake and no GPU: they read a JSON document and write a report.
+The two tools need no toolkit, no CMake and no GPU: they read a JSON document and write a report. The
+Linux archive is built on ubuntu-22.04; a distribution with an older glibc needs the source build.
 
 The reader (`from_cuda`, `write_graph_json`) is a header: C++17, and a CUDA toolkit of 11.4 or newer
 for `<cuda_runtime_api.h>` and `cudart`. It does not need nvcc, and the program calling it is the one
