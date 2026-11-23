@@ -7,8 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-23
+
 ### Fixed
 
+- The version. `0.3.0` declared `0.1.0` in `project(VERSION)` and `GRAPHLINT_VERSION_STRING`, so
+  `find_package(graphlint 0.3 CONFIG)` refused the installed package and the archives named the
+  wrong version. Both are `0.3.1` now, and the release workflow fails when the tag and
+  `project(VERSION)` disagree.
 - The release workflow: `GH_REPO` names the repository in the job that has no checkout, and the job
   checks out the tag because `gh release create --notes-from-tag` reads the annotated message from
   the local repository. Both were red on the first two runs for `v0.3.0`.

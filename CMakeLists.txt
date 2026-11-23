@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(graphlint
-    VERSION 0.3.0
+    VERSION 0.3.1
     DESCRIPTION "Topology linter for CUDA graphs"
     HOMEPAGE_URL "https://github.com/MardokHPC/graph-lint"
     LANGUAGES CXX
