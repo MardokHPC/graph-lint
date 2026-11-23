@@ -1,9 +1,9 @@
 #pragma once
 
 #define GRAPHLINT_VERSION_MAJOR 0
-#define GRAPHLINT_VERSION_MINOR 1
+#define GRAPHLINT_VERSION_MINOR 3
 #define GRAPHLINT_VERSION_PATCH 0
-#define GRAPHLINT_VERSION_STRING "0.1.0"
+#define GRAPHLINT_VERSION_STRING "0.3.0"
 
 #include <cstdio>
 #include <cstdlib>

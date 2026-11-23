@@ -37,6 +37,18 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
+      # v0.3.0 shipped with project(VERSION 0.1.0): the build cannot see the tag, and the
+      # header test compares two copies of the same number. This is the only place that
+      # knows both, so it fails before anything is built.
+      - name: The tag matches project(VERSION)
+        shell: bash
+        run: |
+          version="$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -n 1)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::tag is $TAG, project(VERSION) is $version"
+            exit 1
+          fi
+
       - name: Setup MSVC developer command prompt (Windows only)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
