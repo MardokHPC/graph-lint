@@ -136,7 +136,7 @@ build directory in the working tree must not change the answer.
 2. Comment density: `git ls-files 'include/**' | xargs -r cat | awk 'NF{t++} /^[[:space:]]*(\/\/|\/\*|\*)/{c++} END{printf "%.1f%%\n", t ? 100*c/t : 0}'` — ≤ 10.0%.
 3. Blacklist words: `git grep -niE 'robust|comprehensive|seamless|guarantee[sd]?|key takeaway|why this matters|in summary|effective' -- README.md docs include ':!docs/CONVENTIONS.md'` — zero.
 4. Duplication: `git grep -c '<six-word phrase>'` — one file, count greater than zero.
-5. Absolute paths and the account name: `git grep -nE '(^|[^A-Za-z])[A-Za-z]:[\\/]|/Users/|Simone' -- ':!LICENSE' ':!docs/CONVENTIONS.md'` — zero. The `[^A-Za-z]` boundary is what keeps `https://` out; without it the check never passes.
+5. Absolute paths and the account name: `git grep -nE '(^|[^A-Za-z])[A-Za-z]:[\\/]|/Users/|<account>' -- ':!LICENSE' ':!docs/CONVENTIONS.md'` — zero. The `[^A-Za-z]` boundary is what keeps `https://` out; without it the check never passes.
 6. Lazy test names: `git grep -nE 'TEST\([^,]+, *(Test[0-9]+|Works|Basic)\)' -- tests` — zero.
 7. `git grep -n 'Wpedantic' -- CMakeLists.txt`: the line does not reach the `.cu` targets, and the build stays green with `-Werror`.
 8. `git show --stat HEAD`: if it lists every directory, it is not one logical unit and the commit gets split.
